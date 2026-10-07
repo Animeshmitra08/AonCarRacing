@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
 import type { CarId } from "@/game/entities/Car";
-import type { GameEngine } from "@/game/engine/GameEngine";
-import { findRacer, RacePhase } from "@/game/state/RaceState";
+import type { RaceSimulation } from "@/game/engine/RaceSimulation";
+import { countdownSecondsLeft, findRacer, RacePhase } from "@/game/state/RaceState";
 
 /** Low-frequency race info for React UI. Updated from engine events, never per frame. */
 export interface RaceHudState {
@@ -16,13 +16,14 @@ export interface RaceHudState {
   position: number | null;
 }
 
-function readHudState(engine: GameEngine, carId: CarId, countdown: number | null): RaceHudState {
-  const { race } = engine.state;
+function readHudState(engine: RaceSimulation, carId: CarId, countdown: number | null): RaceHudState {
+  const { race, tick } = engine.state;
   const racer = findRacer(race, carId);
   const position = race.finishOrder.indexOf(carId);
   return {
     phase: race.phase,
-    countdown,
+    // Derived as a fallback for a HUD that mounts after the countdown began (e.g. a network client).
+    countdown: countdown ?? countdownSecondsLeft(race, tick),
     currentLap: Math.min((racer?.completedLaps ?? 0) + 1, race.laps),
     laps: race.laps,
     lastLapTicks: racer?.lastLapTicks ?? null,
@@ -32,7 +33,7 @@ function readHudState(engine: GameEngine, carId: CarId, countdown: number | null
   };
 }
 
-export function useRaceHud(engine: GameEngine, carId: CarId): RaceHudState {
+export function useRaceHud(engine: RaceSimulation, carId: CarId): RaceHudState {
   const [hud, setHud] = useState(() => readHudState(engine, carId, null));
 
   useEffect(

@@ -1,10 +1,15 @@
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useMemo, useRef } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+import { clamp } from "@/game/math/geometry";
 import { createNeutralInput, type CarInput } from "@/game/state/CarInput";
+
+import type { TiltSensitivity } from "./tiltSteering";
+import { useTiltSteering } from "./useTiltSteering";
 
 type ControlButton = "left" | "right" | "throttle" | "brake" | "boost";
 type ButtonState = Record<ControlButton, boolean>;
@@ -13,42 +18,74 @@ const EDGE_PADDING = 20;
 const BUTTON_SIZE = 84;
 const THROTTLE_HEIGHT = 120;
 const BOOST_SIZE = 64;
+const WHEEL_SIZE = 72;
+/** Indicator wheel rotation at full lock, degrees. */
+const WHEEL_MAX_ROTATION = 90;
 const PRESS_TIMING = { duration: 70 } as const;
 /** Fingers drift while racing; never cancel a held button for moving. */
 const UNLIMITED_DISTANCE = 10_000;
 
+export interface TiltOptions {
+  enabled: boolean;
+  sensitivity: TiltSensitivity;
+}
+
 interface TouchControlsProps {
   /** Receives the same (mutated) object on each change; consumers should copy it. */
   onInputChange: (input: Readonly<CarInput>) => void;
+  tilt: TiltOptions;
 }
 
 /**
- * Turns touches into a `CarInput`. It never touches the car or engine directly,
- * so the same input shape can come from a network peer later.
+ * Turns touches (and optionally phone tilt) into a `CarInput`. It never touches
+ * the car or engine directly, so the same input shape can come from a network peer.
  */
-export function TouchControls({ onInputChange }: TouchControlsProps) {
+export function TouchControls({ onInputChange, tilt }: TouchControlsProps) {
   const insets = useSafeAreaInsets();
   const buttons = useRef<ButtonState>({ left: false, right: false, throttle: false, brake: false, boost: false });
+  const tiltSteer = useRef(0);
   const input = useRef(createNeutralInput());
+  const wheel = useSharedValue(0);
 
-  const setPressed = (button: ControlButton, pressed: boolean) => {
+  // Only one steering source is live at a time (tilt hides ◀ ▶, and an unavailable
+  // accelerometer never reports), so the two can simply be added.
+  const emit = () => {
     const b = buttons.current;
-    b[button] = pressed;
     const next = input.current;
-    next.steering = (b.right ? 1 : 0) - (b.left ? 1 : 0);
+    const buttonSteer = (b.right ? 1 : 0) - (b.left ? 1 : 0);
+    next.steering = clamp(tiltSteer.current + buttonSteer, -1, 1);
     next.throttle = b.throttle ? 1 : 0;
     next.brake = b.brake;
     next.boost = b.boost;
     onInputChange(next);
   };
 
+  const setPressed = (button: ControlButton, pressed: boolean) => {
+    buttons.current[button] = pressed;
+    emit();
+  };
+
+  const tiltStatus = useTiltSteering(tilt.enabled, tilt.sensitivity, (steering) => {
+    tiltSteer.current = steering;
+    wheel.set(steering);
+    emit();
+  });
+  // Fall back to buttons if the phone has no accelerometer.
+  const useTilt = tilt.enabled && tiltStatus !== "unavailable";
+
   const bottom = insets.bottom + EDGE_PADDING;
 
   return (
     <View style={styles.overlay}>
       <View style={[styles.cluster, { bottom, left: insets.left + EDGE_PADDING }]}>
-        <HoldButton label="◀" onPressedChange={(p) => setPressed("left", p)} style={styles.round} />
-        <HoldButton label="▶" onPressedChange={(p) => setPressed("right", p)} style={styles.round} />
+        {useTilt ? (
+          <TiltIndicator steering={wheel} />
+        ) : (
+          <>
+            <HoldButton label="◀" onPressedChange={(p) => setPressed("left", p)} style={styles.round} />
+            <HoldButton label="▶" onPressedChange={(p) => setPressed("right", p)} style={styles.round} />
+          </>
+        )}
       </View>
 
       <View style={[styles.cluster, styles.alignEnd, { bottom, right: insets.right + EDGE_PADDING }]}>
@@ -58,6 +95,19 @@ export function TouchControls({ onInputChange }: TouchControlsProps) {
           <HoldButton label="GAS" onPressedChange={(p) => setPressed("throttle", p)} style={[styles.round, styles.throttle]} />
         </View>
       </View>
+    </View>
+  );
+}
+
+/** Small steering wheel that turns with the phone, so players can see what tilt is doing. */
+function TiltIndicator({ steering }: { steering: SharedValue<number> }) {
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${steering.get() * WHEEL_MAX_ROTATION}deg` }] }));
+  return (
+    <View style={styles.tilt}>
+      <Animated.View style={style}>
+        <MaterialCommunityIcons name="steering" size={WHEEL_SIZE} color="rgba(255,255,255,0.85)" />
+      </Animated.View>
+      <Text style={styles.tiltLabel}>TILT TO STEER</Text>
     </View>
   );
 }
@@ -121,4 +171,6 @@ const styles = StyleSheet.create({
   brake: { backgroundColor: "rgba(170,30,30,0.8)" },
   boost: { width: BOOST_SIZE, height: BOOST_SIZE, borderRadius: BOOST_SIZE / 2, backgroundColor: "rgba(200,150,0,0.8)" },
   label: { color: "white", fontSize: 16, fontWeight: "900" },
+  tilt: { alignItems: "center", gap: 2, pointerEvents: "none" },
+  tiltLabel: { color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
 });

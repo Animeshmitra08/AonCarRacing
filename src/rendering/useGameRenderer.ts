@@ -3,8 +3,8 @@ import { useSharedValue, type SharedValue } from "react-native-reanimated";
 
 import { SIM_HZ } from "@/game/constants/PhysicsConstants";
 import type { CarId } from "@/game/entities/Car";
-import type { GameEngine } from "@/game/engine/GameEngine";
-import { lerp, lerpAngle, type Pose } from "@/game/math/geometry";
+import type { RaceSimulation } from "@/game/engine/RaceSimulation";
+import type { Pose } from "@/game/math/geometry";
 import type { GameEvent } from "@/game/state/GameEvents";
 import type { GameState } from "@/game/state/GameState";
 import { findRacer, racerElapsedTicks } from "@/game/state/RaceState";
@@ -31,7 +31,7 @@ export class GameRenderer {
   private readonly followIndex: number;
 
   constructor(
-    private readonly engine: GameEngine,
+    private readonly engine: RaceSimulation,
     readonly snapshot: SharedValue<number[]>,
     private readonly followCarId: CarId,
   ) {
@@ -67,15 +67,11 @@ export class GameRenderer {
     // Shared values are serialized (and cached) per object, so each frame needs a new array.
     const next = createSnapshot(cars.length);
 
+    this.engine.writeRenderPoses(alpha, this.poses);
     for (let i = 0; i < cars.length; i++) {
-      const car = cars[i];
-      const pose = this.poses[i];
-      pose.x = lerp(car.prevX, car.x, alpha);
-      pose.y = lerp(car.prevY, car.y, alpha);
-      pose.angle = lerpAngle(car.prevAngle, car.angle, alpha);
       const base = SNAP_CARS_OFFSET + i * SNAP_CAR_STRIDE;
-      next[base] = pose.x;
-      next[base + 1] = pose.y;
+      next[base] = this.poses[i].x;
+      next[base + 1] = this.poses[i].y;
     }
 
     this.view?.render(state, this.poses, this.followIndex, frameDt);
@@ -89,7 +85,7 @@ export class GameRenderer {
   };
 }
 
-export function useGameRenderer(engine: GameEngine, followCarId: CarId): GameRenderer {
+export function useGameRenderer(engine: RaceSimulation, followCarId: CarId): GameRenderer {
   const snapshot = useSharedValue(createSnapshot(engine.state.cars.length));
   const [renderer] = useState(() => new GameRenderer(engine, snapshot, followCarId));
   useEffect(() => renderer.attach(), [renderer]);

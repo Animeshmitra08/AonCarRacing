@@ -1,115 +1,89 @@
-import { router } from "expo-router";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import { router, useIsFocused } from "expo-router";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import type { TrackDefinition } from "@/game/entities/Track";
-import { TRACKS } from "@/game/tracks";
+import { BottomNavBar, type NavTab } from "@/menu/BottomNavBar";
 import { MENU_COLORS } from "@/menu/MenuTheme";
-import { ColorSwatches, Segmented, SettingRow, Stepper } from "@/menu/SettingControls";
-import { TrackCard } from "@/menu/TrackCard";
-import { CAR_COLORS, type GraphicsQuality } from "@/rendering/RenderConstants";
-import type { CameraMode } from "@/rendering/three/SceneConstants";
-import { LAP_LIMITS, useGameSettings } from "@/settings/GameSettings";
+import { GarageTab } from "@/menu/tabs/GarageTab";
+import { MultiplayerPanel } from "@/menu/tabs/MultiplayerPanel";
+import { RaceTab } from "@/menu/tabs/RaceTab";
+import { SettingsTab } from "@/menu/tabs/SettingsTab";
+import { useGameSettings } from "@/settings/GameSettings";
 
-const CAMERA_OPTIONS: readonly { value: CameraMode; label: string }[] = [
-  { value: "close", label: "CLOSE" },
-  { value: "far", label: "FAR" },
-];
+type HomeTab = "race" | "garage" | "multiplayer" | "settings";
 
-const GRAPHICS_OPTIONS: readonly { value: GraphicsQuality; label: string }[] = [
-  { value: "performance", label: "LOW" },
-  { value: "balanced", label: "MEDIUM" },
-  { value: "quality", label: "HIGH" },
+const TABS: readonly NavTab<HomeTab>[] = [
+  { key: "race", label: "RACE", icon: "flag" },
+  { key: "garage", label: "GARAGE", icon: "car-sport" },
+  { key: "multiplayer", label: "MULTIPLAYER", icon: "people" },
+  { key: "settings", label: "SETTINGS", icon: "settings-sharp" },
 ];
 
 const SCREEN_PADDING = 16;
+const TAB_FADE_MS = 180;
 
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const { settings, updateSettings } = useGameSettings();
+  const isFocused = useIsFocused();
+  const { settings } = useGameSettings();
+  const [tab, setTab] = useState<HomeTab>("race");
 
-  // Picking a map also resets laps to that map's default; the player can change it after.
-  const selectTrack = (track: TrackDefinition) => updateSettings({ trackId: track.id, laps: track.laps });
-  const startRace = () => router.push("/race");
+  // Multiplayer has its own HOST/JOIN buttons; everywhere else the big button starts a solo race.
+  const primary = tab === "multiplayer" ? null : { label: "RACE", onPress: () => router.push("/race") };
+  const sidePadding = { paddingLeft: insets.left + SCREEN_PADDING, paddingRight: insets.right + SCREEN_PADDING };
 
   return (
-    <View
-      style={[
-        styles.root,
-        {
-          paddingTop: insets.top + SCREEN_PADDING,
-          paddingBottom: insets.bottom + SCREEN_PADDING,
-          paddingLeft: insets.left + SCREEN_PADDING,
-          paddingRight: insets.right + SCREEN_PADDING,
-        },
-      ]}
-    >
-      <View style={styles.left}>
+    <View style={styles.root}>
+      <View style={[styles.topBar, sidePadding, { paddingTop: insets.top + SCREEN_PADDING / 2 }]}>
         <Text style={styles.title}>
           CAR <Text style={styles.titleAccent}>RACING</Text>
         </Text>
-        <Text style={styles.sectionLabel}>SELECT MAP</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tracks}>
-          {TRACKS.map((track) => (
-            <TrackCard key={track.id} definition={track} selected={track.id === settings.trackId} onSelect={selectTrack} />
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={styles.panel}>
-        <ScrollView contentContainerStyle={styles.settings} showsVerticalScrollIndicator={false}>
-          <SettingRow label="LAPS">
-            <Stepper value={settings.laps} min={LAP_LIMITS.min} max={LAP_LIMITS.max} onChange={(laps) => updateSettings({ laps })} />
-          </SettingRow>
-          <SettingRow label="CAR COLOR">
-            <ColorSwatches
-              colors={CAR_COLORS}
-              selectedIndex={settings.carColorIndex}
-              onChange={(carColorIndex) => updateSettings({ carColorIndex })}
-            />
-          </SettingRow>
-          <SettingRow label="CAMERA">
-            <Segmented options={CAMERA_OPTIONS} value={settings.cameraMode} onChange={(cameraMode) => updateSettings({ cameraMode })} />
-          </SettingRow>
-          <SettingRow label="GRAPHICS">
-            <Segmented
-              options={GRAPHICS_OPTIONS}
-              value={settings.graphicsQuality}
-              onChange={(graphicsQuality) => updateSettings({ graphicsQuality })}
-            />
-          </SettingRow>
-        </ScrollView>
-
-        <Pressable onPress={startRace} style={({ pressed }) => [styles.raceButton, pressed && styles.raceButtonPressed]}>
-          <Text style={styles.raceButtonText}>RACE ▶</Text>
+        <Pressable onPress={() => setTab("settings")} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
+          <Ionicons name="person-circle" size={20} color={MENU_COLORS.highlight} />
+          <Text style={styles.chipText} numberOfLines={1}>
+            {settings.playerName || "Player"}
+          </Text>
         </Pressable>
       </View>
+
+      <Animated.View key={tab} entering={FadeIn.duration(TAB_FADE_MS)} style={[styles.content, sidePadding]}>
+        {tab === "race" && <RaceTab />}
+        {tab === "garage" && <GarageTab visible={isFocused} />}
+        {tab === "multiplayer" && <MultiplayerPanel />}
+        {tab === "settings" && <SettingsTab />}
+      </Animated.View>
+
+      <BottomNavBar
+        tabs={TABS}
+        active={tab}
+        onChange={setTab}
+        primary={primary}
+        bottomInset={insets.bottom}
+        sideInset={insets.left}
+      />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, flexDirection: "row", gap: SCREEN_PADDING, backgroundColor: MENU_COLORS.background },
-  left: { flex: 1.5, justifyContent: "center", gap: 10 },
-  title: { color: MENU_COLORS.text, fontSize: 34, fontWeight: "900", fontStyle: "italic", letterSpacing: 1 },
+  root: { flex: 1, backgroundColor: MENU_COLORS.background },
+  topBar: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingBottom: 8 },
+  title: { color: MENU_COLORS.text, fontSize: 26, fontWeight: "900", fontStyle: "italic", letterSpacing: 1 },
   titleAccent: { color: MENU_COLORS.accent },
-  sectionLabel: { color: MENU_COLORS.textMuted, fontSize: 11, fontWeight: "800", letterSpacing: 1.2 },
-  tracks: { gap: 12, paddingVertical: 6, paddingRight: 12 },
-  panel: {
-    flex: 1,
-    maxWidth: 340,
-    padding: 14,
-    gap: 12,
-    borderRadius: 16,
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    maxWidth: 200,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
     backgroundColor: MENU_COLORS.panel,
   },
-  settings: { gap: 14 },
-  raceButton: {
-    paddingVertical: 14,
-    borderRadius: 12,
-    alignItems: "center",
-    backgroundColor: MENU_COLORS.accent,
-  },
-  raceButtonPressed: { opacity: 0.75 },
-  raceButtonText: { color: MENU_COLORS.text, fontSize: 20, fontWeight: "900", letterSpacing: 2 },
+  chipText: { color: MENU_COLORS.text, fontSize: 13, fontWeight: "800" },
+  pressed: { opacity: 0.7 },
+  content: { flex: 1, paddingBottom: 12 },
 });

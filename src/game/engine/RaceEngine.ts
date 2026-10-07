@@ -4,7 +4,13 @@ import type { Car } from "@/game/entities/Car";
 import { crossesCheckpoint } from "@/game/entities/Checkpoint";
 import type { Track } from "@/game/entities/Track";
 import type { GameEvent } from "@/game/state/GameEvents";
-import { RacePhase, resetRacerProgress, type RaceState, type RacerProgress } from "@/game/state/RaceState";
+import {
+  canRacerDrive,
+  RacePhase,
+  resetRacerProgress,
+  type RaceState,
+  type RacerProgress,
+} from "@/game/state/RaceState";
 
 const ALLOWED_TRANSITIONS: Record<RacePhase, readonly RacePhase[]> = {
   [RacePhase.Lobby]: [RacePhase.Countdown],
@@ -29,8 +35,7 @@ export class RaceEngine {
 
   /** Whether driver input should reach the cars this tick. */
   canDrive(racer: RacerProgress): boolean {
-    const { phase } = this.state;
-    return (phase === RacePhase.Racing || phase === RacePhase.Finishing) && racer.finishTicks === null;
+    return canRacerDrive(this.state, racer);
   }
 
   // ---- Commands ----

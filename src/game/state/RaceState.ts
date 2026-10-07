@@ -1,3 +1,5 @@
+import { SIM_HZ } from "@/game/constants/PhysicsConstants";
+import { COUNTDOWN_TICKS } from "@/game/constants/RaceConstants";
 import type { CarId } from "@/game/entities/Car";
 
 export const RacePhase = {
@@ -70,6 +72,18 @@ function createRacerProgress(carId: CarId, checkpointCount: number): RacerProgre
 
 export function findRacer(race: RaceState, carId: CarId): RacerProgress | undefined {
   return race.racers.find((r) => r.carId === carId);
+}
+
+/** Whole seconds left in the countdown (for UI that mounts mid-countdown), or null. */
+export function countdownSecondsLeft(race: RaceState, tick: number): number | null {
+  if (race.phase !== RacePhase.Countdown) return null;
+  const secondsLeft = Math.ceil((COUNTDOWN_TICKS - (tick - race.phaseStartTick)) / SIM_HZ);
+  return secondsLeft > 0 ? secondsLeft : null;
+}
+
+/** Whether a racer's driver input should reach their car this tick. */
+export function canRacerDrive(race: RaceState, racer: RacerProgress): boolean {
+  return (race.phase === RacePhase.Racing || race.phase === RacePhase.Finishing) && racer.finishTicks === null;
 }
 
 /** Elapsed race ticks for a racer: frozen once they finish, 0 before the start. */

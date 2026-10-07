@@ -1,9 +1,12 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 
 import { MENU_COLORS } from "./MenuTheme";
 
 const SWATCH_SIZE = 28;
+const TOGGLE = { width: 52, knob: 24, padding: 3 } as const;
+const TOGGLE_TIMING = { duration: 160 } as const;
 
 export function SettingRow({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -64,6 +67,33 @@ function StepButton({ label, disabled, onPress }: { label: string; disabled: boo
   );
 }
 
+interface ToggleProps {
+  value: boolean;
+  onChange: (value: boolean) => void;
+}
+
+export function Toggle({ value, onChange }: ToggleProps) {
+  const progress = useSharedValue(value ? 1 : 0);
+  useEffect(() => {
+    progress.set(withTiming(value ? 1 : 0, TOGGLE_TIMING));
+  }, [progress, value]);
+
+  const trackStyle = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(progress.get(), [0, 1], [MENU_COLORS.panelRaised, MENU_COLORS.accent]),
+  }));
+  const knobStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: progress.get() * (TOGGLE.width - TOGGLE.knob - TOGGLE.padding * 2) }],
+  }));
+
+  return (
+    <Pressable onPress={() => onChange(!value)} hitSlop={8} accessibilityRole="switch" accessibilityState={{ checked: value }}>
+      <Animated.View style={[styles.toggle, trackStyle]}>
+        <Animated.View style={[styles.knob, knobStyle]} />
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 interface ColorSwatchesProps {
   colors: readonly string[];
   selectedIndex: number;
@@ -75,7 +105,7 @@ export function ColorSwatches({ colors, selectedIndex, onChange }: ColorSwatches
     <View style={styles.swatches}>
       {colors.map((color, index) => (
         <Pressable
-          key={color}
+          key={index}
           onPress={() => onChange(index)}
           style={[styles.swatch, { backgroundColor: color }, index === selectedIndex && styles.swatchSelected]}
         />
@@ -118,4 +148,11 @@ const styles = StyleSheet.create({
     borderColor: "transparent",
   },
   swatchSelected: { borderColor: MENU_COLORS.text },
+  toggle: {
+    width: TOGGLE.width,
+    height: TOGGLE.knob + TOGGLE.padding * 2,
+    borderRadius: (TOGGLE.knob + TOGGLE.padding * 2) / 2,
+    padding: TOGGLE.padding,
+  },
+  knob: { width: TOGGLE.knob, height: TOGGLE.knob, borderRadius: TOGGLE.knob / 2, backgroundColor: MENU_COLORS.text },
 });

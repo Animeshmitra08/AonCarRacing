@@ -3,7 +3,7 @@ import type { SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import type { CarId } from "@/game/entities/Car";
-import type { GameEngine } from "@/game/engine/GameEngine";
+import type { RaceSimulation } from "@/game/engine/RaceSimulation";
 import { RacePhase } from "@/game/state/RaceState";
 
 import { formatTicks } from "./format";
@@ -16,25 +16,26 @@ const GO_HOLD_MS = 600;
 const PANEL_PADDING = 12;
 const MENU_HIT_SLOP = 10;
 
+/** Who may start/restart the race. Network clients get `null` and wait for the host. */
+export interface RaceControls {
+  start(): void;
+  restart(): void;
+}
+
 interface RaceHudProps {
-  engine: GameEngine;
+  engine: RaceSimulation;
   carId: CarId;
   /** Index-aligned with `engine.state.cars`. */
   carColors: readonly string[];
   snapshot: SharedValue<number[]>;
+  controls: RaceControls | null;
   onExit: () => void;
 }
 
-export function RaceHud({ engine, carId, carColors, snapshot, onExit }: RaceHudProps) {
+export function RaceHud({ engine, carId, carColors, snapshot, controls, onExit }: RaceHudProps) {
   const hud = useRaceHud(engine, carId);
   const insets = useSafeAreaInsets();
   const playerIndex = engine.state.cars.findIndex((car) => car.id === carId);
-
-  const startRace = () => engine.startRace();
-  const raceAgain = () => {
-    engine.resetRace();
-    engine.startRace();
-  };
 
   return (
     <View style={styles.overlay}>
@@ -65,7 +66,7 @@ export function RaceHud({ engine, carId, carColors, snapshot, onExit }: RaceHudP
       </Pressable>
 
       <View style={styles.center}>
-        <PhaseOverlay hud={hud} onStart={startRace} onRaceAgain={raceAgain} onExit={onExit} />
+        <PhaseOverlay hud={hud} controls={controls} onExit={onExit} />
       </View>
     </View>
   );
@@ -73,15 +74,18 @@ export function RaceHud({ engine, carId, carColors, snapshot, onExit }: RaceHudP
 
 interface PhaseOverlayProps {
   hud: RaceHudState;
-  onStart: () => void;
-  onRaceAgain: () => void;
+  controls: RaceControls | null;
   onExit: () => void;
 }
 
-function PhaseOverlay({ hud, onStart, onRaceAgain, onExit }: PhaseOverlayProps) {
+function PhaseOverlay({ hud, controls, onExit }: PhaseOverlayProps) {
   switch (hud.phase) {
     case RacePhase.Lobby:
-      return <HudButton label="TAP TO START" onPress={onStart} />;
+      return controls ? (
+        <HudButton label="TAP TO START" onPress={() => controls.start()} />
+      ) : (
+        <Text style={styles.waiting}>WAITING FOR HOST…</Text>
+      );
     case RacePhase.Countdown:
       return hud.countdown === null ? null : <PopText key={hud.countdown} text={String(hud.countdown)} />;
     case RacePhase.Racing:
@@ -96,7 +100,11 @@ function PhaseOverlay({ hud, onStart, onRaceAgain, onExit }: PhaseOverlayProps) 
           <Text style={styles.resultsLine}>BEST LAP {formatTicks(hud.bestLapTicks)}</Text>
           <View style={styles.resultsButtons}>
             <HudButton label="MENU" onPress={onExit} secondary />
-            <HudButton label="RACE AGAIN" onPress={onRaceAgain} />
+            {controls ? (
+              <HudButton label="RACE AGAIN" onPress={() => controls.restart()} />
+            ) : (
+              <Text style={styles.waiting}>WAITING FOR HOST…</Text>
+            )}
           </View>
         </View>
       );
@@ -142,7 +150,8 @@ const styles = StyleSheet.create({
   },
   resultsTitle: { color: "white", fontSize: 48, fontWeight: "900" },
   resultsLine: { color: "white", fontSize: 18, fontWeight: "700" },
-  resultsButtons: { flexDirection: "row", gap: 12 },
+  resultsButtons: { flexDirection: "row", alignItems: "center", gap: 12 },
+  waiting: { color: "white", fontSize: 16, fontWeight: "800", letterSpacing: 1, marginTop: 8 },
   menuButton: {
     position: "absolute",
     alignSelf: "center",

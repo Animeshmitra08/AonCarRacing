@@ -8,6 +8,7 @@ import { GameEngine } from "@/game/engine/GameEngine";
 import type { CarInput } from "@/game/state/CarInput";
 import { findTrack } from "@/game/tracks";
 import { RaceHud } from "@/hud/RaceHud";
+import { resolveCarLook } from "@/rendering/carStyle";
 import { GameView3D } from "@/rendering/GameView3D";
 import { CAR_COLORS, GRAPHICS_PRESETS } from "@/rendering/RenderConstants";
 import { useGameRenderer } from "@/rendering/useGameRenderer";
@@ -25,7 +26,10 @@ export function RaceScreen() {
   const [race] = useState(() => ({
     engine: new GameEngine({ track: findTrack(settings.trackId), carIds: [LOCAL_PLAYER], laps: settings.laps }),
     carColors: [CAR_COLORS[settings.carColorIndex % CAR_COLORS.length]],
-    viewOptions: { cameraMode: settings.cameraMode },
+    viewOptions: {
+      cameraMode: settings.cameraMode,
+      carLooks: [resolveCarLook(settings.carColorIndex, settings.carStyle)],
+    },
     renderScale: GRAPHICS_PRESETS[settings.graphicsQuality].renderScale,
   }));
   const { engine, carColors } = race;
@@ -38,6 +42,13 @@ export function RaceScreen() {
   }, [engine]);
 
   const handleInput = (input: Readonly<CarInput>) => engine.setInput(LOCAL_PLAYER, input);
+  const controls = {
+    start: () => engine.startRace(),
+    restart: () => {
+      engine.resetRace();
+      engine.startRace();
+    },
+  };
   const exitToMenu = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   return (
@@ -45,11 +56,21 @@ export function RaceScreen() {
       <GameView3D
         engine={engine}
         renderer={renderer}
-        viewOptions={{ ...race.viewOptions, carColors }}
+        viewOptions={race.viewOptions}
         renderScale={race.renderScale}
       />
-      <TouchControls onInputChange={handleInput} />
-      <RaceHud engine={engine} carId={LOCAL_PLAYER} carColors={carColors} snapshot={renderer.snapshot} onExit={exitToMenu} />
+      <TouchControls
+        onInputChange={handleInput}
+        tilt={{ enabled: settings.tiltSteering, sensitivity: settings.tiltSensitivity }}
+      />
+      <RaceHud
+        engine={engine}
+        carId={LOCAL_PLAYER}
+        carColors={carColors}
+        snapshot={renderer.snapshot}
+        controls={controls}
+        onExit={exitToMenu}
+      />
     </View>
   );
 }

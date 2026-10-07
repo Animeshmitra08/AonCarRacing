@@ -1,15 +1,20 @@
-import { FIXED_DT, FIXED_DT_MS, MAX_FRAME_MS, MAX_STEPS_PER_FRAME } from "@/game/constants/PhysicsConstants";
+import { FIXED_DT } from "@/game/constants/PhysicsConstants";
 import { MAX_PLAYERS } from "@/game/constants/RaceConstants";
 import { Car, type CarId } from "@/game/entities/Car";
 import { buildTrack, type TrackDefinition } from "@/game/entities/Track";
+import { lerp, lerpAngle, type Pose } from "@/game/math/geometry";
 import { copyInput, createNeutralInput, NEUTRAL_INPUT, type CarInput } from "@/game/state/CarInput";
 import type { GameEvent, GameEventListener } from "@/game/state/GameEvents";
 import type { GameState } from "@/game/state/GameState";
 import { createRaceState } from "@/game/state/RaceState";
 
 import { CarController } from "./CarController";
+import { FixedStepLoop } from "./FixedStepLoop";
 import { PhysicsEngine } from "./PhysicsEngine";
 import { RaceEngine } from "./RaceEngine";
+import type { FrameListener, RaceSimulation } from "./RaceSimulation";
+
+export type { FrameListener } from "./RaceSimulation";
 
 export interface GameEngineConfig {
   track: TrackDefinition;
@@ -19,14 +24,17 @@ export interface GameEngineConfig {
   laps?: number;
 }
 
-/** Called once per display frame after simulation; `alpha` is 0..1 between the last two ticks. */
-export type FrameListener = (state: GameState, alpha: number, frameDt: number) => void;
+/** Hooks around each fixed tick, e.g. for a network host to feed inputs and emit snapshots. */
+export interface StepHooks {
+  beforeStep?(tick: number): void;
+  afterStep?(tick: number): void;
+}
 
 /**
  * Owns the simulation and the fixed-timestep loop. Has no React/rendering
  * dependencies: input goes in via `setInput`, state/events come out.
  */
-export class GameEngine {
+export class GameEngine implements RaceSimulation {
   readonly state: GameState;
 
   private readonly physics = new PhysicsEngine();
@@ -35,11 +43,12 @@ export class GameEngine {
   /** Latest input per car (index-aligned with `state.cars`). */
   private readonly inputs: CarInput[];
   private readonly listeners = new Set<GameEventListener>();
+  private readonly stepHooks = new Set<StepHooks>();
   private frameListener: FrameListener | null = null;
-
-  private rafId: number | null = null;
-  private lastFrameTime = -1;
-  private accumulator = 0;
+  private readonly loop = new FixedStepLoop(
+    () => this.step(),
+    (alpha, frameDt) => this.frameListener?.(this.state, alpha, frameDt),
+  );
 
   constructor(config: GameEngineConfig) {
     if (config.carIds.length === 0 || config.carIds.length > MAX_PLAYERS) {
@@ -64,7 +73,7 @@ export class GameEngine {
     this.race = new RaceEngine(this.state.race, track, (event) => this.emit(event));
   }
 
-  // ---- Input / commands (the seam a network layer will call later) ----
+  // ---- Input / commands (local controls or a network host call these) ----
 
   setInput(carId: CarId, input: Readonly<CarInput>): void {
     const index = this.indexOf(carId);
@@ -91,32 +100,50 @@ export class GameEngine {
     };
   }
 
+  addStepHooks(hooks: StepHooks): () => void {
+    this.stepHooks.add(hooks);
+    return () => {
+      this.stepHooks.delete(hooks);
+    };
+  }
+
   setFrameListener(listener: FrameListener | null): void {
     this.frameListener = listener;
+  }
+
+  writeRenderPoses(alpha: number, out: Pose[]): void {
+    const { cars } = this.state;
+    for (let i = 0; i < cars.length; i++) {
+      const car = cars[i];
+      const pose = out[i];
+      pose.x = lerp(car.prevX, car.x, alpha);
+      pose.y = lerp(car.prevY, car.y, alpha);
+      pose.angle = lerpAngle(car.prevAngle, car.angle, alpha);
+    }
   }
 
   // ---- Loop ----
 
   start(): void {
-    if (this.rafId !== null) return;
-    this.lastFrameTime = -1;
-    this.rafId = requestAnimationFrame(this.onFrame);
+    this.loop.start();
   }
 
   stop(): void {
-    if (this.rafId !== null) cancelAnimationFrame(this.rafId);
-    this.rafId = null;
+    this.loop.stop();
   }
 
   dispose(): void {
     this.stop();
     this.listeners.clear();
+    this.stepHooks.clear();
     this.frameListener = null;
     this.physics.dispose();
   }
 
   /** Advances exactly one fixed tick. Public so a headless host or tests can drive it. */
   step(): void {
+    for (const hooks of this.stepHooks) hooks.beforeStep?.(this.state.tick);
+
     const { cars, race } = this.state;
     for (let i = 0; i < cars.length; i++) {
       const car = cars[i];
@@ -127,26 +154,9 @@ export class GameEngine {
     this.physics.step();
     this.state.tick++;
     this.race.update(this.state.tick, cars);
+
+    for (const hooks of this.stepHooks) hooks.afterStep?.(this.state.tick);
   }
-
-  private readonly onFrame = (now: number): void => {
-    this.rafId = requestAnimationFrame(this.onFrame);
-
-    const frameMs = this.lastFrameTime < 0 ? FIXED_DT_MS : Math.min(now - this.lastFrameTime, MAX_FRAME_MS);
-    this.lastFrameTime = now;
-    this.accumulator += frameMs;
-
-    let steps = 0;
-    while (this.accumulator >= FIXED_DT_MS && steps < MAX_STEPS_PER_FRAME) {
-      this.step();
-      this.accumulator -= FIXED_DT_MS;
-      steps++;
-    }
-    // Couldn't catch up: drop the backlog rather than spiral.
-    if (this.accumulator >= FIXED_DT_MS) this.accumulator = 0;
-
-    this.frameListener?.(this.state, this.accumulator / FIXED_DT_MS, frameMs / 1000);
-  };
 
   private emit(event: GameEvent): void {
     for (const listener of this.listeners) listener(event);
