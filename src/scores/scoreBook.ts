@@ -10,10 +10,12 @@ export interface TrackRecord {
   wins: number;
 }
 
+export type RaceMode = "solo" | "multiplayer";
+
 export interface RaceResult {
   trackId: string;
   laps: number;
-  mode: "solo" | "multiplayer";
+  mode: RaceMode;
   /** Null = did not finish. */
   totalTicks: number | null;
   bestLapTicks: number | null;
@@ -22,8 +24,20 @@ export interface RaceResult {
   at: number;
 }
 
+/** Career counts for one race mode, across all tracks. */
+export interface ModeStats {
+  /** Races entered, finished or not. */
+  played: number;
+  finished: number;
+  /** First place against at least one other driver (multiplayer only). */
+  wins: number;
+  /** Top three against at least one other driver (multiplayer only). */
+  podiums: number;
+}
+
 export interface ScoreBook {
   tracks: Record<string, TrackRecord>;
+  modes: Record<RaceMode, ModeStats>;
   /** Newest first. */
   recent: RaceResult[];
 }
@@ -36,11 +50,15 @@ export interface RecordOutcome {
 const MAX_RECENT = 8;
 
 export function emptyScoreBook(): ScoreBook {
-  return { tracks: {}, recent: [] };
+  return { tracks: {}, modes: { solo: emptyModeStats(), multiplayer: emptyModeStats() }, recent: [] };
 }
 
 function emptyTrackRecord(): TrackRecord {
   return { bestLapTicks: null, bestRaceTicks: {}, racesFinished: 0, wins: 0 };
+}
+
+function emptyModeStats(): ModeStats {
+  return { played: 0, finished: 0, wins: 0, podiums: 0 };
 }
 
 /** Returns the updated book (never mutates) and whether any personal best was set. */
@@ -51,18 +69,37 @@ export function recordResult(book: ScoreBook, result: RaceResult): { book: Score
   const newBestLap =
     result.bestLapTicks !== null && (previous.bestLapTicks === null || result.bestLapTicks < previous.bestLapTicks);
   const newBestRace = result.totalTicks !== null && (previousRace === undefined || result.totalTicks < previousRace);
+  const finished = result.totalTicks !== null;
+  // Placings only count against other drivers.
+  const placed = result.mode === "multiplayer" && result.racers > 1 && finished ? result.position : null;
+  const won = placed === 1;
 
   const record: TrackRecord = {
     bestLapTicks: newBestLap ? result.bestLapTicks : previous.bestLapTicks,
     bestRaceTicks: newBestRace ? { ...previous.bestRaceTicks, [lapKey]: result.totalTicks! } : previous.bestRaceTicks,
-    racesFinished: previous.racesFinished + (result.totalTicks !== null ? 1 : 0),
-    wins: previous.wins + (result.mode === "multiplayer" && result.position === 1 && result.racers > 1 ? 1 : 0),
+    racesFinished: previous.racesFinished + (finished ? 1 : 0),
+    wins: previous.wins + (won ? 1 : 0),
   };
+  const stats = book.modes[result.mode];
   const updated: ScoreBook = {
     tracks: { ...book.tracks, [result.trackId]: record },
+    modes: {
+      ...book.modes,
+      [result.mode]: {
+        played: stats.played + 1,
+        finished: stats.finished + (finished ? 1 : 0),
+        wins: stats.wins + (won ? 1 : 0),
+        podiums: stats.podiums + (placed !== null && placed <= 3 ? 1 : 0),
+      },
+    },
     recent: [result, ...book.recent].slice(0, MAX_RECENT),
   };
   return { book: fitStorageLimit(updated), outcome: { newBestLap, newBestRace } };
+}
+
+/** Zeroes one mode's career counts. Personal bests and recent races are kept. */
+export function resetModeStats(book: ScoreBook, mode: RaceMode): ScoreBook {
+  return { ...book, modes: { ...book.modes, [mode]: emptyModeStats() } };
 }
 
 /** Drops the oldest recent results until the JSON fits secure storage's size limit. */
@@ -74,13 +111,6 @@ export function fitStorageLimit(book: ScoreBook): ScoreBook {
   return fitted;
 }
 
-export function totals(book: ScoreBook): { racesFinished: number; wins: number } {
-  return Object.values(book.tracks).reduce(
-    (sum, t) => ({ racesFinished: sum.racesFinished + t.racesFinished, wins: sum.wins + t.wins }),
-    { racesFinished: 0, wins: 0 },
-  );
-}
-
 // ---- Validation of stored data ----
 
 const isTicks = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v > 0;
@@ -88,7 +118,7 @@ const isCount = (v: unknown): v is number => typeof v === "number" && Number.isI
 
 export function parseScoreBook(value: unknown): ScoreBook {
   if (typeof value !== "object" || value === null) return emptyScoreBook();
-  const { tracks, recent } = value as Record<string, unknown>;
+  const { tracks, modes, recent } = value as Record<string, unknown>;
   const book = emptyScoreBook();
 
   if (typeof tracks === "object" && tracks !== null) {
@@ -127,5 +157,42 @@ export function parseScoreBook(value: unknown): ScoreBook {
       });
     }
   }
+
+  const savedModes = typeof modes === "object" && modes !== null ? (modes as Record<string, unknown>) : {};
+  const legacy = legacyModeStats(book.tracks);
+  book.modes = {
+    solo: parseModeStats(savedModes.solo) ?? legacy.solo,
+    multiplayer: parseModeStats(savedModes.multiplayer) ?? legacy.multiplayer,
+  };
   return book;
+}
+
+function parseModeStats(value: unknown): ModeStats | null {
+  if (typeof value !== "object" || value === null) return null;
+  const s = value as Record<string, unknown>;
+  if (!isCount(s.played)) return null;
+  return {
+    played: s.played,
+    finished: isCount(s.finished) ? s.finished : 0,
+    wins: isCount(s.wins) ? s.wins : 0,
+    podiums: isCount(s.podiums) ? s.podiums : 0,
+  };
+}
+
+/**
+ * Books saved before per-mode counts only had per-track totals. Wins are exact (only
+ * multiplayer races earn them); the other finished races are counted as solo.
+ */
+function legacyModeStats(tracks: Record<string, TrackRecord>): Record<RaceMode, ModeStats> {
+  let finished = 0;
+  let wins = 0;
+  for (const track of Object.values(tracks)) {
+    finished += track.racesFinished;
+    wins += track.wins;
+  }
+  const solo = Math.max(0, finished - wins);
+  return {
+    solo: { played: solo, finished: solo, wins: 0, podiums: 0 },
+    multiplayer: { played: wins, finished: wins, wins, podiums: wins },
+  };
 }

@@ -1,10 +1,21 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useState } from "react";
-import { Alert, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import Animated, { FadeInLeft, FadeInRight } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useAccount } from "@/account/AccountContext";
+import { googleDisplayName, signInWithGoogle } from "@/account/googleAuth";
 import { cleanName, randomGuestName } from "@/account/profile";
 import { LoginBackground } from "@/login/LoginBackground";
 import { MENU_COLORS } from "@/menu/MenuTheme";
@@ -15,15 +26,25 @@ const GOOGLE_BLUE = "#4285F4";
 
 /**
  * First screen for a new player. Guest sign-in stores only a display name on the
- * device; Google sign-in is a placeholder for now (see `signInWithGoogle`).
+ * device; Google sign-in uses the Google account's first name (see `@/account/googleAuth`).
  */
 export function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { signIn } = useAccount();
   const [name, setName] = useState("");
   const [placeholder] = useState(randomGuestName);
+  const [googleBusy, setGoogleBusy] = useState(false);
 
-  const playAsGuest = () => signIn(name.trim() || placeholder, "guest");
+  const playAsGuest = () => signIn(name.trim() || placeholder);
+
+  const playWithGoogle = async () => {
+    if (googleBusy) return;
+    setGoogleBusy(true);
+    const result = await signInWithGoogle();
+    setGoogleBusy(false);
+    if (result.type === "success") signIn(googleDisplayName(result.response.data.user), result.response);
+    else if (result.type === "error") Alert.alert("Google sign-in failed", result.message);
+  };
 
   return (
     <View style={styles.root}>
@@ -73,8 +94,16 @@ export function LoginScreen() {
             <View style={styles.dividerLine} />
           </View>
 
-          <Pressable onPress={signInWithGoogle} style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}>
-            <Ionicons name="logo-google" size={18} color={GOOGLE_BLUE} />
+          <Pressable
+            onPress={playWithGoogle}
+            disabled={googleBusy}
+            style={({ pressed }) => [styles.googleButton, pressed && styles.pressed]}
+          >
+            {googleBusy ? (
+              <ActivityIndicator size="small" color={GOOGLE_BLUE} />
+            ) : (
+              <Ionicons name="logo-google" size={18} color={GOOGLE_BLUE} />
+            )}
             <Text style={styles.googleText}>Sign in with Google</Text>
           </Pressable>
 
@@ -85,14 +114,6 @@ export function LoginScreen() {
         </Animated.View>
       </KeyboardAvoidingView>
     </View>
-  );
-}
-
-/** Placeholder until Google sign-in is configured (needs OAuth client IDs and a dev build). */
-function signInWithGoogle(): void {
-  Alert.alert(
-    "Coming soon",
-    "Google sign-in is on its way. Play as a guest for now. Your progress is saved on this phone either way.",
   );
 }
 

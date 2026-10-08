@@ -2,12 +2,22 @@ import { createContext, use, useRef, useState, type ReactNode } from "react";
 
 import { STORAGE_KEYS, writeJson } from "@/storage/secureJson";
 
-import { emptyScoreBook, recordResult, type RaceResult, type RecordOutcome, type ScoreBook } from "./scoreBook";
+import {
+  emptyScoreBook,
+  recordResult,
+  resetModeStats,
+  type RaceMode,
+  type RaceResult,
+  type RecordOutcome,
+  type ScoreBook,
+} from "./scoreBook";
 
 interface ScoresContextValue {
   scores: ScoreBook;
   /** Saves a finished (or DNF) race and reports any new personal bests. */
   record: (result: RaceResult) => RecordOutcome;
+  /** Zeroes one mode's race counts; personal bests are kept. */
+  resetMode: (mode: RaceMode) => void;
   clear: () => void;
 }
 
@@ -32,9 +42,11 @@ export function ScoresProvider({ initial, children }: { initial: ScoreBook; chil
     return outcome;
   };
 
+  const resetMode = (mode: RaceMode) => commit(resetModeStats(latest.current, mode));
+
   const clear = () => commit(emptyScoreBook());
 
-  return <ScoresContext value={{ scores, record, clear }}>{children}</ScoresContext>;
+  return <ScoresContext value={{ scores, record, resetMode, clear }}>{children}</ScoresContext>;
 }
 
 export function useScores(): ScoresContextValue {

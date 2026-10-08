@@ -7,6 +7,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { BottomNavBar, type NavTab } from "@/menu/BottomNavBar";
 import { MENU_COLORS } from "@/menu/MenuTheme";
+import { PlayerAvatar } from "@/menu/PlayerAvatar";
 import { GarageTab } from "@/menu/tabs/GarageTab";
 import { MultiplayerPanel } from "@/menu/tabs/MultiplayerPanel";
 import { RaceTab } from "@/menu/tabs/RaceTab";
@@ -24,6 +25,7 @@ const TABS: readonly NavTab<HomeTab>[] = [
 ];
 
 const SCREEN_PADDING = 16;
+const AVATAR_SIZE = 22;
 const TAB_FADE_MS = 180;
 
 export function HomeScreen() {
@@ -31,6 +33,8 @@ export function HomeScreen() {
   const isFocused = useIsFocused();
   const { profile } = useAccount();
   const [tab, setTab] = useState<HomeTab>("race");
+  const google = profile?.google;
+  const chipName = google?.name ?? displayName(profile);
 
   // Multiplayer has its own HOST/JOIN buttons; everywhere else the big button starts a solo race.
   const primary = tab === "multiplayer" ? null : { label: "RACE", onPress: () => router.push("/race") };
@@ -43,9 +47,13 @@ export function HomeScreen() {
           CAR <Text style={styles.titleAccent}>RACING</Text>
         </Text>
         <Pressable onPress={() => setTab("settings")} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
-          <Ionicons name="person-circle" size={20} color={MENU_COLORS.highlight} />
+          {google ? (
+            <PlayerAvatar photo={google.photo} name={chipName} size={AVATAR_SIZE} />
+          ) : (
+            <Ionicons name="person-circle" size={AVATAR_SIZE} color={MENU_COLORS.highlight} />
+          )}
           <Text style={styles.chipText} numberOfLines={1}>
-            {displayName(profile)}
+            {chipName}
           </Text>
         </Pressable>
       </View>
@@ -79,8 +87,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
     maxWidth: 200,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingLeft: 6,
+    paddingRight: 12,
+    paddingVertical: 5,
     borderRadius: 999,
     backgroundColor: MENU_COLORS.panel,
   },

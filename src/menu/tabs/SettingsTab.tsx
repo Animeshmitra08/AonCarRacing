@@ -1,17 +1,13 @@
-import { Ionicons } from "@expo/vector-icons";
 import type { ReactNode } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { useAccount } from "@/account/AccountContext";
 import type { SteeringControl } from "@/controls/steeringOptions";
 import type { TiltSensitivity } from "@/controls/tiltSteering";
 import { MENU_COLORS } from "@/menu/MenuTheme";
+import { ProfileCard } from "@/menu/ProfileCard";
 import { Segmented, SettingRow, Toggle } from "@/menu/SettingControls";
-import { MAX_NAME_LENGTH } from "@/network/constants";
 import type { GraphicsQuality } from "@/rendering/RenderConstants";
 import type { CameraMode } from "@/rendering/three/SceneConstants";
-import { totals } from "@/scores/scoreBook";
-import { useScores } from "@/scores/ScoresContext";
 import { useGameSettings } from "@/settings/GameSettings";
 
 const CAMERA_OPTIONS: readonly { value: CameraMode; label: string }[] = [
@@ -38,18 +34,11 @@ const SENSITIVITY_OPTIONS: readonly { value: TiltSensitivity; label: string }[] 
 
 export function SettingsTab() {
   const { settings, updateSettings } = useGameSettings();
-  const { profile, rename, signOut } = useAccount();
-  const { scores } = useScores();
-  const stats = totals(scores);
-
-  const confirmSignOut = () =>
-    Alert.alert("Sign out?", "Your settings and scores stay on this phone for next time.", [
-      { text: "Cancel", style: "cancel" },
-      { text: "Sign out", style: "destructive", onPress: signOut },
-    ]);
 
   return (
     <ScrollView contentContainerStyle={styles.root} showsVerticalScrollIndicator={false}>
+      <ProfileCard />
+
       <Section title="CONTROLS">
         <SettingRow label="ON-SCREEN STEERING">
           <Segmented
@@ -96,26 +85,6 @@ export function SettingsTab() {
         </SettingRow>
       </Section>
 
-      <Section title="PROFILE">
-        <SettingRow label="PLAYER NAME">
-          <TextInput
-            value={profile?.name ?? ""}
-            onChangeText={rename}
-            maxLength={MAX_NAME_LENGTH}
-            placeholder="Your name"
-            placeholderTextColor={MENU_COLORS.textMuted}
-            style={styles.input}
-          />
-        </SettingRow>
-        <Text style={styles.hint}>
-          Signed in as {profile?.provider === "google" ? "Google user" : "guest"} · {stats.racesFinished} races finished ·{" "}
-          {stats.wins} multiplayer wins
-        </Text>
-        <Pressable onPress={confirmSignOut} style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
-          <Ionicons name="log-out-outline" size={18} color={MENU_COLORS.text} />
-          <Text style={styles.signOutText}>SIGN OUT</Text>
-        </Pressable>
-      </Section>
     </ScrollView>
   );
 }
@@ -137,24 +106,4 @@ const styles = StyleSheet.create({
   toggleText: { flex: 1, gap: 2 },
   toggleTitle: { color: MENU_COLORS.text, fontSize: 15, fontWeight: "800" },
   hint: { color: MENU_COLORS.textMuted, fontSize: 12, fontWeight: "600" },
-  input: {
-    color: MENU_COLORS.text,
-    backgroundColor: MENU_COLORS.panelRaised,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 15,
-    fontWeight: "800",
-  },
-  signOut: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 8,
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: MENU_COLORS.panelRaised,
-  },
-  signOutText: { color: MENU_COLORS.text, fontSize: 14, fontWeight: "900", letterSpacing: 1 },
-  pressed: { opacity: 0.7 },
 });

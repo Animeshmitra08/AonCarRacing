@@ -24,7 +24,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <StatusBar hidden />
       {playerData && (
-        <AccountProvider initial={playerData.profile}>
+        <AccountProvider initial={playerData.profile} initialGoogleSession={playerData.googleSession}>
           <GameSettingsProvider initial={playerData.settings}>
             <ScoresProvider initial={playerData.scores}>
               <MultiplayerProvider>

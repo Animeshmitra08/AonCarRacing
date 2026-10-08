@@ -4,7 +4,7 @@ import type { CarId } from "@/game/entities/Car";
 import type { RaceSimulation } from "@/game/engine/RaceSimulation";
 import { findRacer, RacePhase } from "@/game/state/RaceState";
 
-import type { RecordOutcome } from "./scoreBook";
+import type { RaceMode, RecordOutcome } from "./scoreBook";
 import { useScores } from "./ScoresContext";
 
 /**
@@ -14,7 +14,7 @@ import { useScores } from "./ScoresContext";
 export function useRecordRaceResult(
   engine: RaceSimulation,
   carId: CarId,
-  mode: "solo" | "multiplayer",
+  mode: RaceMode,
 ): RecordOutcome | null {
   const { record } = useScores();
   const [outcome, setOutcome] = useState<RecordOutcome | null>(null);

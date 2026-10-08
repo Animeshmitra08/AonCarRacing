@@ -6,6 +6,7 @@ import * as SecureStore from "expo-secure-store";
  */
 export const STORAGE_KEYS = {
   profile: "carracing.profile.v1",
+  googleSession: "carracing.googleSession.v1",
   settings: "carracing.settings.v1",
   scores: "carracing.scores.v1",
 } as const;
