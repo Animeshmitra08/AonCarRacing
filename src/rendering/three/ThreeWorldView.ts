@@ -10,12 +10,15 @@ import { DEFAULT_CAR_STYLE, resolveCarLook, type CarLook } from "@/rendering/car
 import { METERS_PER_WORLD_UNIT as S } from "@/rendering/RenderConstants";
 import type { WorldView } from "@/rendering/WorldView";
 
-import type { CarAsset } from "./carAsset";
+import { pickCarAsset, type CarAssets } from "./loadCarAssets";
 import { CarModel } from "./CarModel";
 import { ChaseCamera } from "./ChaseCamera";
 import { createGLRenderer } from "./createGLRenderer";
 import { disposeScene } from "./disposeScene";
 import { CAMERA_PRESETS, ENVIRONMENTS, SCENE, type CameraMode } from "./SceneConstants";
+import { createScenery } from "./scenery/createScenery";
+import { SmokeSystem } from "./SmokeSystem";
+import type { SceneryModels } from "./scenery/sceneryModels";
 import { createTrackModel } from "./TrackModel";
 
 const SUN_DIRECTION = { x: 0.4, y: 1, z: 0.25 } as const;
@@ -24,6 +27,15 @@ export interface ThreeWorldViewOptions {
   /** Index-aligned with `cars`. */
   carLooks: readonly CarLook[];
   cameraMode: CameraMode;
+  /** 0..1 fraction of trees/buildings to show. */
+  sceneryDensity: number;
+}
+
+/** Shared models loaded once per app run (see loading/loadGameAssets.ts). */
+export interface WorldAssets {
+  /** Each car uses its chosen model; missing models fall back (see `pickCarAsset`). */
+  cars: CarAssets;
+  scenery: SceneryModels;
 }
 
 /** Third-person 3D view rendered with three.js on an expo-gl context. */
@@ -32,6 +44,7 @@ export class ThreeWorldView implements WorldView {
   private readonly scene = new Scene();
   private readonly chase: ChaseCamera;
   private readonly carModels: CarModel[];
+  private readonly smoke: SmokeSystem;
   private width = 0;
   private height = 0;
 
@@ -40,8 +53,7 @@ export class ThreeWorldView implements WorldView {
     track: Track,
     cars: readonly Car[],
     options: ThreeWorldViewOptions,
-    /** Shared detailed car model; `null` uses the low-poly fallback. */
-    carAsset: CarAsset | null,
+    assets: WorldAssets,
   ) {
     this.renderer = createGLRenderer(gl);
     this.chase = new ChaseCamera(CAMERA_PRESETS[options.cameraMode]);
@@ -55,11 +67,15 @@ export class ThreeWorldView implements WorldView {
     sun.position.set(SUN_DIRECTION.x, SUN_DIRECTION.y, SUN_DIRECTION.z);
     scene.add(sun);
     scene.add(createTrackModel(track, palette));
+    scene.add(createScenery(track, palette, assets.scenery, options.sceneryDensity));
 
-    this.carModels = cars.map(
-      (car, i) => new CarModel(options.carLooks[i] ?? resolveCarLook(car.slot, DEFAULT_CAR_STYLE), carAsset),
-    );
+    this.carModels = cars.map((car, i) => {
+      const look = options.carLooks[i] ?? resolveCarLook(car.slot, DEFAULT_CAR_STYLE);
+      return new CarModel(look, pickCarAsset(assets.cars, look.model));
+    });
     for (const model of this.carModels) scene.add(model.root);
+    this.smoke = new SmokeSystem(cars.length);
+    scene.add(this.smoke.object);
 
     this.syncSize();
   }
@@ -81,11 +97,13 @@ export class ThreeWorldView implements WorldView {
         car.boosting,
         dt,
       );
+      this.smoke.emitFromCar(i, pose.x * S, pose.y * S, pose.angle, car.forwardSpeed, car.boosting, dt);
     }
 
     const target = cars[followIndex];
     const pose = poses[followIndex];
     this.chase.update(pose.x * S, pose.y * S, pose.angle, this.speedRatio(target), target.boosting, target.steer, dt);
+    this.smoke.update(dt, this.height, this.chase.camera.fov);
 
     this.renderer.render(this.scene, this.chase.camera);
     this.gl.endFrameEXP();
@@ -96,6 +114,7 @@ export class ThreeWorldView implements WorldView {
   }
 
   dispose(): void {
+    this.smoke.dispose();
     disposeScene(this.scene);
     this.renderer.dispose();
   }

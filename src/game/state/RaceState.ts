@@ -20,6 +20,8 @@ export interface RacerProgress {
   lapStartTick: number;
   lastLapTicks: number | null;
   bestLapTicks: number | null;
+  /** Each completed lap's time, in order (for the results leaderboard). */
+  lapTimes: number[];
   /** Ticks from race start to crossing the line on the final lap. */
   finishTicks: number | null;
 }
@@ -53,6 +55,7 @@ export function resetRacerProgress(racer: RacerProgress, startTick: number, chec
   racer.lapStartTick = startTick;
   racer.lastLapTicks = null;
   racer.bestLapTicks = null;
+  racer.lapTimes = [];
   racer.finishTicks = null;
 }
 
@@ -64,6 +67,7 @@ function createRacerProgress(carId: CarId, checkpointCount: number): RacerProgre
     lapStartTick: 0,
     lastLapTicks: null,
     bestLapTicks: null,
+    lapTimes: [],
     finishTicks: null,
   };
   resetRacerProgress(racer, 0, checkpointCount);

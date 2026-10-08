@@ -17,11 +17,17 @@ export const MPS_TO_KMH = 3.6;
 
 export type GraphicsQuality = "performance" | "balanced" | "quality";
 
-/** Fraction of native resolution the 3D view renders at (then scaled up). */
-export const GRAPHICS_PRESETS: Record<GraphicsQuality, { renderScale: number }> = {
-  performance: { renderScale: 0.5 },
-  balanced: { renderScale: 0.75 },
-  quality: { renderScale: 1 },
+export interface GraphicsPreset {
+  /** Fraction of native resolution the 3D view renders at (then scaled up). */
+  renderScale: number;
+  /** Fraction of trees/buildings kept (0..1). */
+  sceneryDensity: number;
+}
+
+export const GRAPHICS_PRESETS: Record<GraphicsQuality, GraphicsPreset> = {
+  performance: { renderScale: 0.5, sceneryDensity: 0.45 },
+  balanced: { renderScale: 0.75, sceneryDensity: 0.75 },
+  quality: { renderScale: 1, sceneryDensity: 1 },
 };
 
 /** Impact speeds (world units/s) mapped to camera shake 0..1. */

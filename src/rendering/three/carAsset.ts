@@ -1,8 +1,10 @@
-import { Box3, BufferGeometry, Color, Float32BufferAttribute, Mesh, Uint32BufferAttribute, Vector3, type BufferAttribute, type InterleavedBufferAttribute, type Material, type Object3D } from "three";
+import { Box3, Vector3, type BufferGeometry, type Color, type Material, type Mesh, type Object3D } from "three";
 import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 import { CAR_DIMENSIONS } from "@/game/constants/PhysicsConstants";
 import { METERS_PER_WORLD_UNIT as S } from "@/rendering/RenderConstants";
+
+import { bakeMeshGeometry } from "./bakeGeometry";
 
 /** What a part of the car is, so the game can restyle it. Decided by glTF material name. */
 export type PartRole =
@@ -43,6 +45,35 @@ const ROLE_BY_MATERIAL: Record<string, PartRole> = {
 
 const WHEEL_NODE = /^Wheel(Front|Rear)(L|R)$/;
 
+const KNOWN_ROLES = new Set<string>([
+  "paint",
+  "accent",
+  "glass",
+  "trim",
+  "mechanical",
+  "rim",
+  "rimInner",
+  "caliper",
+  "disc",
+  "tire",
+  "chrome",
+  "headlight",
+  "taillight",
+  "signal",
+]);
+
+/**
+ * Models built by scripts/segment-scan-car.mjs name materials "role:<role>";
+ * authored models (CarConcept) are mapped by their original material names.
+ */
+function roleFor(materialName: string): PartRole {
+  if (materialName.startsWith("role:")) {
+    const role = materialName.slice(5);
+    return KNOWN_ROLES.has(role) ? (role as PartRole) : "original";
+  }
+  return ROLE_BY_MATERIAL[materialName] ?? "original";
+}
+
 export interface CarPart {
   role: PartRole;
   /** Original material colour; only used for `original` parts. */
@@ -82,12 +113,12 @@ export function buildCarAsset(scene: Object3D): CarAsset {
     if (!(object as Mesh).isMesh) return;
     const meshMaterial = (object as Mesh).material;
     const material = (Array.isArray(meshMaterial) ? meshMaterial[0] : meshMaterial) as Material & { color?: Color };
-    const role = ROLE_BY_MATERIAL[material.name] ?? "original";
+    const role = roleFor(material.name);
     const color = material.color?.getHex() ?? 0x888888;
     const key = role === "original" ? `${role}:${color}` : role;
     const wheel = findWheelAncestor(object);
     const groups = wheel ? getOrCreate(wheelGroups, wheel, () => new Map()) : bodyGroups;
-    getOrCreate(groups, key, () => ({ role, color, geometries: [] })).geometries.push(bakeGeometry(object as Mesh));
+    getOrCreate(groups, key, () => ({ role, color, geometries: [] })).geometries.push(bakeMeshGeometry(object as Mesh));
   });
 
   const body = [...bodyGroups.values()].map(mergeGroup);
@@ -148,42 +179,4 @@ function mergeGroup(group: { role: PartRole; color: number; geometries: BufferGe
   if (!geometry) throw new Error(`Couldn't merge car parts for role "${group.role}".`);
   for (const source of group.geometries) if (source !== geometry) source.dispose();
   return { role: group.role, color: group.color, geometry };
-}
-
-/**
- * Copies a mesh's geometry into car space as plain float position/normal + uint32 index,
- * so parts with different source layouts can be merged.
- */
-function bakeGeometry(mesh: Mesh): BufferGeometry {
-  const source = mesh.geometry;
-  const geometry = new BufferGeometry();
-  geometry.setAttribute("position", toFloat32(source.getAttribute("position")));
-  const normal = source.getAttribute("normal");
-  if (normal) geometry.setAttribute("normal", toFloat32(normal));
-
-  const count = source.getAttribute("position").count;
-  const index = new Uint32Array(source.index ? source.index.count : count);
-  for (let i = 0; i < index.length; i++) index[i] = source.index ? source.index.getX(i) : i;
-  // A mirrored transform flips triangle winding; flip it back so back-face culling still works.
-  if (mesh.matrixWorld.determinant() < 0) {
-    for (let i = 0; i < index.length; i += 3) {
-      const swap = index[i + 1];
-      index[i + 1] = index[i + 2];
-      index[i + 2] = swap;
-    }
-  }
-  geometry.setIndex(new Uint32BufferAttribute(index, 1));
-  geometry.applyMatrix4(mesh.matrixWorld);
-  if (!normal) geometry.computeVertexNormals();
-  return geometry;
-}
-
-function toFloat32(attribute: BufferAttribute | InterleavedBufferAttribute): Float32BufferAttribute {
-  const out = new Float32Array(attribute.count * 3);
-  for (let i = 0; i < attribute.count; i++) {
-    out[i * 3] = attribute.getX(i);
-    out[i * 3 + 1] = attribute.getY(i);
-    out[i * 3 + 2] = attribute.getZ(i);
-  }
-  return new Float32BufferAttribute(out, 3);
 }

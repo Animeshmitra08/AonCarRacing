@@ -2,6 +2,8 @@ import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 
+import { useAccount } from "@/account/AccountContext";
+import { displayName } from "@/account/profile";
 import { TouchControls } from "@/controls/TouchControls";
 import type { CarId } from "@/game/entities/Car";
 import { GameEngine } from "@/game/engine/GameEngine";
@@ -12,6 +14,7 @@ import { resolveCarLook } from "@/rendering/carStyle";
 import { GameView3D } from "@/rendering/GameView3D";
 import { CAR_COLORS, GRAPHICS_PRESETS } from "@/rendering/RenderConstants";
 import { useGameRenderer } from "@/rendering/useGameRenderer";
+import { useRecordRaceResult } from "@/scores/useRecordRaceResult";
 import { useGameSettings } from "@/settings/GameSettings";
 
 const LOCAL_PLAYER: CarId = "local";
@@ -23,17 +26,21 @@ const LOCAL_PLAYER: CarId = "local";
 export function RaceScreen() {
   // Settings are read once: changing them mid-race would require rebuilding the engine.
   const { settings } = useGameSettings();
+  const { profile } = useAccount();
   const [race] = useState(() => ({
     engine: new GameEngine({ track: findTrack(settings.trackId), carIds: [LOCAL_PLAYER], laps: settings.laps }),
     carColors: [CAR_COLORS[settings.carColorIndex % CAR_COLORS.length]],
+    racerNames: [displayName(profile)],
     viewOptions: {
       cameraMode: settings.cameraMode,
       carLooks: [resolveCarLook(settings.carColorIndex, settings.carStyle)],
+      sceneryDensity: GRAPHICS_PRESETS[settings.graphicsQuality].sceneryDensity,
     },
     renderScale: GRAPHICS_PRESETS[settings.graphicsQuality].renderScale,
   }));
-  const { engine, carColors } = race;
+  const { engine, carColors, racerNames } = race;
   const renderer = useGameRenderer(engine, LOCAL_PLAYER);
+  const personalBest = useRecordRaceResult(engine, LOCAL_PLAYER, "solo");
 
   useEffect(() => {
     engine.start();
@@ -61,12 +68,18 @@ export function RaceScreen() {
       />
       <TouchControls
         onInputChange={handleInput}
-        tilt={{ enabled: settings.tiltSteering, sensitivity: settings.tiltSensitivity }}
+        steering={{
+          control: settings.steeringControl,
+          tilt: settings.tiltSteering,
+          tiltSensitivity: settings.tiltSensitivity,
+        }}
       />
       <RaceHud
         engine={engine}
         carId={LOCAL_PLAYER}
         carColors={carColors}
+        racerNames={racerNames}
+        personalBest={personalBest}
         snapshot={renderer.snapshot}
         controls={controls}
         onExit={exitToMenu}

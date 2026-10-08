@@ -2,6 +2,8 @@ import { router } from "expo-router";
 import { useState } from "react";
 import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { useAccount } from "@/account/AccountContext";
+import { displayName } from "@/account/profile";
 import { findTrack } from "@/game/tracks";
 import { MENU_COLORS } from "@/menu/MenuTheme";
 import { SettingRow } from "@/menu/SettingControls";
@@ -17,8 +19,10 @@ type Busy = "host" | "join" | null;
 
 /** Host-a-room / join-a-room panels. Used by the home MULTIPLAYER tab and the /multiplayer screen. */
 export function MultiplayerPanel() {
-  const { settings, updateSettings } = useGameSettings();
+  const { settings } = useGameSettings();
+  const { profile, rename } = useAccount();
   const { setSession } = useMultiplayer();
+  const name = displayName(profile);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState<Busy>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +32,7 @@ export function MultiplayerPanel() {
     setBusy(kind);
     setError(null);
     try {
-      setSession(kind === "host" ? await hostRoom(settings) : await joinRoom(code, settings));
+      setSession(kind === "host" ? await hostRoom(settings, name) : await joinRoom(code, settings, name));
       router.push("/multiplayer/lobby");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
@@ -42,8 +46,8 @@ export function MultiplayerPanel() {
       <View style={styles.nameRow}>
         <Text style={styles.label}>PLAYING AS</Text>
         <TextInput
-          value={settings.playerName}
-          onChangeText={(playerName) => updateSettings({ playerName })}
+          value={profile?.name ?? ""}
+          onChangeText={rename}
           maxLength={MAX_NAME_LENGTH}
           placeholder="Your name"
           placeholderTextColor={MENU_COLORS.textMuted}

@@ -1,14 +1,20 @@
+import { Ionicons } from "@expo/vector-icons";
 import { useMemo } from "react";
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import Animated, { FadeIn } from "react-native-reanimated";
 
 import { CarPreview3D } from "@/menu/CarPreview3D";
 import { MENU_COLORS } from "@/menu/MenuTheme";
 import { ColorSwatches, SettingRow } from "@/menu/SettingControls";
+import { CAR_MODELS, carModelAt } from "@/rendering/carCatalog";
 import {
   ACCENT_OPTIONS,
   CALIPER_OPTIONS,
-  RIM_OPTIONS,
+  GLASS_OPTIONS,
+  LIGHT_OPTIONS,
   resolveCarLook,
+  RIM_OPTIONS,
+  TRIM_OPTIONS,
   type CarStyle,
   type StyleOption,
 } from "@/rendering/carStyle";
@@ -20,18 +26,44 @@ interface GarageTabProps {
   visible: boolean;
 }
 
+type StylePart = Exclude<keyof CarStyle, "model">;
+
+/** Every recolourable detail, in the order shown. */
+const PARTS: readonly { key: StylePart; label: string; options: readonly StyleOption[] }[] = [
+  { key: "accent", label: "ACCENT · ROOF, SILLS, WING", options: ACCENT_OPTIONS },
+  { key: "trim", label: "TRIM · GRILLE & LOWER BODY", options: TRIM_OPTIONS },
+  { key: "rims", label: "RIMS", options: RIM_OPTIONS },
+  { key: "calipers", label: "BRAKE CALIPERS", options: CALIPER_OPTIONS },
+  { key: "glass", label: "WINDOW TINT", options: GLASS_OPTIONS },
+  { key: "lights", label: "HEADLIGHTS", options: LIGHT_OPTIONS },
+];
+
 export function GarageTab({ visible }: GarageTabProps) {
   const { settings, updateSettings } = useGameSettings();
   const { carColorIndex, carStyle } = settings;
   const look = useMemo(() => resolveCarLook(carColorIndex, carStyle), [carColorIndex, carStyle]);
-  const paint = look.paint;
+  const car = carModelAt(carStyle.model);
   const setStyle = (patch: Partial<CarStyle>) => updateSettings({ carStyle: { ...carStyle, ...patch } });
+  const cycleModel = (step: number) =>
+    setStyle({ model: (carStyle.model + step + CAR_MODELS.length) % CAR_MODELS.length });
 
   return (
     <View style={styles.root}>
-      <View style={styles.preview}>{visible && <CarPreview3D look={look} />}</View>
+      <View style={styles.preview}>
+        {visible && <CarPreview3D look={look} />}
+        <View style={styles.modelBar}>
+          <ArrowButton icon="chevron-back" onPress={() => cycleModel(-1)} />
+          <Animated.View key={car.id} entering={FadeIn.duration(200)} style={styles.modelInfo}>
+            <Text style={styles.modelName}>{car.name.toUpperCase()}</Text>
+            <Text style={styles.modelTagline}>
+              {car.tagline} · {carStyle.model + 1}/{CAR_MODELS.length}
+            </Text>
+          </Animated.View>
+          <ArrowButton icon="chevron-forward" onPress={() => cycleModel(1)} />
+        </View>
+      </View>
+
       <ScrollView style={styles.panel} contentContainerStyle={styles.panelContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>YOUR CAR</Text>
         <SettingRow label="PAINT">
           <ColorSwatches
             colors={CAR_COLORS}
@@ -39,54 +71,55 @@ export function GarageTab({ visible }: GarageTabProps) {
             onChange={(index) => updateSettings({ carColorIndex: index })}
           />
         </SettingRow>
-        <StyleRow
-          label="ACCENT"
-          options={ACCENT_OPTIONS}
-          paint={paint}
-          selected={carStyle.accent}
-          onChange={(accent) => setStyle({ accent })}
-        />
-        <StyleRow
-          label="RIMS"
-          options={RIM_OPTIONS}
-          paint={paint}
-          selected={carStyle.rims}
-          onChange={(rims) => setStyle({ rims })}
-        />
-        <StyleRow
-          label="BRAKE CALIPERS"
-          options={CALIPER_OPTIONS}
-          paint={paint}
-          selected={carStyle.calipers}
-          onChange={(calipers) => setStyle({ calipers })}
-        />
+        {PARTS.map((part) => (
+          <SettingRow key={part.key} label={`${part.label} · ${part.options[carStyle[part.key]].label.toUpperCase()}`}>
+            <ColorSwatches
+              colors={part.options.map((o) => o.color ?? look.paint)}
+              selectedIndex={carStyle[part.key]}
+              onChange={(index) => setStyle({ [part.key]: index })}
+            />
+          </SettingRow>
+        ))}
         <Text style={styles.hint}>Other players see your car exactly like this in multiplayer.</Text>
       </ScrollView>
     </View>
   );
 }
 
-interface StyleRowProps {
-  label: string;
-  options: readonly StyleOption[];
-  paint: string;
-  selected: number;
-  onChange: (index: number) => void;
-}
-
-function StyleRow({ label, options, paint, selected, onChange }: StyleRowProps) {
+function ArrowButton({ icon, onPress }: { icon: "chevron-back" | "chevron-forward"; onPress: () => void }) {
   return (
-    <SettingRow label={`${label} · ${options[selected].label.toUpperCase()}`}>
-      <ColorSwatches colors={options.map((o) => o.color ?? paint)} selectedIndex={selected} onChange={onChange} />
-    </SettingRow>
+    <Pressable onPress={onPress} hitSlop={8} style={({ pressed }) => [styles.arrow, pressed && styles.pressed]}>
+      <Ionicons name={icon} size={22} color={MENU_COLORS.text} />
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1, flexDirection: "row", gap: 16 },
   preview: { flex: 1.6, borderRadius: 16, overflow: "hidden", backgroundColor: MENU_COLORS.panel },
-  panel: { flex: 1, maxWidth: 320, borderRadius: 16, backgroundColor: MENU_COLORS.panel },
+  modelBar: {
+    position: "absolute",
+    left: 12,
+    right: 12,
+    bottom: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    pointerEvents: "box-none",
+  },
+  modelInfo: { flex: 1, alignItems: "center", pointerEvents: "none" },
+  modelName: { color: MENU_COLORS.text, fontSize: 20, fontWeight: "900", fontStyle: "italic", letterSpacing: 1.5 },
+  modelTagline: { color: MENU_COLORS.textMuted, fontSize: 11, fontWeight: "700" },
+  arrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.45)",
+  },
+  pressed: { opacity: 0.6 },
+  panel: { flex: 1, maxWidth: 330, borderRadius: 16, backgroundColor: MENU_COLORS.panel },
   panelContent: { padding: 16, gap: 14 },
-  title: { color: MENU_COLORS.text, fontSize: 18, fontWeight: "900", fontStyle: "italic" },
   hint: { color: MENU_COLORS.textMuted, fontSize: 12, fontWeight: "600" },
 });

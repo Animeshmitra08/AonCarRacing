@@ -5,6 +5,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-na
 
 import type { TrackDefinition, TrackEnvironment } from "@/game/entities/Track";
 import { getBuiltTrack } from "@/game/tracks";
+import { formatTicks } from "@/hud/format";
 import { METERS_PER_WORLD_UNIT } from "@/rendering/RenderConstants";
 import { ENVIRONMENTS } from "@/rendering/three/SceneConstants";
 import { createTrackOutline } from "@/rendering/trackOutline";
@@ -27,9 +28,11 @@ interface TrackCardProps {
   definition: TrackDefinition;
   selected: boolean;
   onSelect: (definition: TrackDefinition) => void;
+  /** Personal best lap on this track, if any (simulation ticks). */
+  bestLapTicks: number | null;
 }
 
-export function TrackCard({ definition, selected, onSelect }: TrackCardProps) {
+export function TrackCard({ definition, selected, onSelect, bestLapTicks }: TrackCardProps) {
   const track = getBuiltTrack(definition);
   const outline = useMemo(
     () => createTrackOutline(track, TRACK_CARD_WIDTH, PREVIEW_HEIGHT, PREVIEW_PADDING),
@@ -57,6 +60,9 @@ export function TrackCard({ definition, selected, onSelect }: TrackCardProps) {
           <Text style={styles.meta}>
             {ENVIRONMENT_LABELS[definition.environment]} · {lengthMeters} m
           </Text>
+          <Text style={[styles.meta, bestLapTicks !== null && styles.best]}>
+            {bestLapTicks !== null ? `BEST LAP ${formatTicks(bestLapTicks)}` : "No lap record yet"}
+          </Text>
         </View>
       </Animated.View>
     </Pressable>
@@ -79,4 +85,5 @@ const styles = StyleSheet.create({
   info: { paddingHorizontal: 12, paddingVertical: 8, gap: 2 },
   name: { color: MENU_COLORS.text, fontSize: 16, fontWeight: "900" },
   meta: { color: MENU_COLORS.textMuted, fontSize: 12, fontWeight: "600" },
+  best: { color: MENU_COLORS.highlight, fontWeight: "900", fontVariant: ["tabular-nums"] },
 });

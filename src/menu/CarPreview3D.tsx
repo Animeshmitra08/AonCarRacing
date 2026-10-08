@@ -3,7 +3,7 @@ import { Suspense, use, useEffect, useRef } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 import type { CarLook } from "@/rendering/carStyle";
-import { loadCarAsset } from "@/rendering/three/loadCarAsset";
+import { loadCarAssets } from "@/rendering/three/loadCarAssets";
 import { TurntableScene } from "@/rendering/three/TurntableScene";
 
 import { MENU_COLORS } from "./MenuTheme";
@@ -24,7 +24,7 @@ export function CarPreview3D({ look }: { look: CarLook }) {
 }
 
 function Turntable({ look }: { look: CarLook }) {
-  const asset = use(loadCarAsset());
+  const assets = use(loadCarAssets());
   const scene = useRef<TurntableScene | null>(null);
 
   useEffect(() => {
@@ -41,7 +41,7 @@ function Turntable({ look }: { look: CarLook }) {
 
   const handleContextCreate = (gl: ExpoWebGLRenderingContext) => {
     scene.current?.dispose();
-    scene.current = new TurntableScene(gl, look, asset);
+    scene.current = new TurntableScene(gl, look, assets);
   };
 
   return <GLView style={styles.view} onContextCreate={handleContextCreate} />;

@@ -1,12 +1,17 @@
+import { Ionicons } from "@expo/vector-icons";
 import type { ReactNode } from "react";
-import { ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
+import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 
+import { useAccount } from "@/account/AccountContext";
+import type { SteeringControl } from "@/controls/steeringOptions";
 import type { TiltSensitivity } from "@/controls/tiltSteering";
 import { MENU_COLORS } from "@/menu/MenuTheme";
 import { Segmented, SettingRow, Toggle } from "@/menu/SettingControls";
 import { MAX_NAME_LENGTH } from "@/network/constants";
 import type { GraphicsQuality } from "@/rendering/RenderConstants";
 import type { CameraMode } from "@/rendering/three/SceneConstants";
+import { totals } from "@/scores/scoreBook";
+import { useScores } from "@/scores/ScoresContext";
 import { useGameSettings } from "@/settings/GameSettings";
 
 const CAMERA_OPTIONS: readonly { value: CameraMode; label: string }[] = [
@@ -20,6 +25,11 @@ const GRAPHICS_OPTIONS: readonly { value: GraphicsQuality; label: string }[] = [
   { value: "quality", label: "HIGH" },
 ];
 
+const STEERING_OPTIONS: readonly { value: SteeringControl; label: string }[] = [
+  { value: "buttons", label: "◀ ▶ BUTTONS" },
+  { value: "wheel", label: "WHEEL" },
+];
+
 const SENSITIVITY_OPTIONS: readonly { value: TiltSensitivity; label: string }[] = [
   { value: "low", label: "LOW" },
   { value: "medium", label: "MEDIUM" },
@@ -28,14 +38,37 @@ const SENSITIVITY_OPTIONS: readonly { value: TiltSensitivity; label: string }[] 
 
 export function SettingsTab() {
   const { settings, updateSettings } = useGameSettings();
+  const { profile, rename, signOut } = useAccount();
+  const { scores } = useScores();
+  const stats = totals(scores);
+
+  const confirmSignOut = () =>
+    Alert.alert("Sign out?", "Your settings and scores stay on this phone for next time.", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign out", style: "destructive", onPress: signOut },
+    ]);
 
   return (
     <ScrollView contentContainerStyle={styles.root} showsVerticalScrollIndicator={false}>
       <Section title="CONTROLS">
+        <SettingRow label="ON-SCREEN STEERING">
+          <Segmented
+            options={STEERING_OPTIONS}
+            value={settings.steeringControl}
+            onChange={(steeringControl) => updateSettings({ steeringControl })}
+          />
+        </SettingRow>
+        <Text style={styles.hint}>
+          {settings.steeringControl === "wheel"
+            ? settings.tiltSteering
+              ? "The wheel turns with your phone. Grab it to steer by hand."
+              : "Put your thumb on the wheel and turn it. It re-centres when you let go."
+            : "Hold ◀ or ▶ to steer."}
+        </Text>
         <View style={styles.toggleRow}>
           <View style={styles.toggleText}>
             <Text style={styles.toggleTitle}>Tilt steering</Text>
-            <Text style={styles.hint}>Turn the phone like a steering wheel instead of using ◀ ▶.</Text>
+            <Text style={styles.hint}>Turn the phone like a steering wheel. Works with both controls above.</Text>
           </View>
           <Toggle value={settings.tiltSteering} onChange={(tiltSteering) => updateSettings({ tiltSteering })} />
         </View>
@@ -66,14 +99,22 @@ export function SettingsTab() {
       <Section title="PROFILE">
         <SettingRow label="PLAYER NAME">
           <TextInput
-            value={settings.playerName}
-            onChangeText={(playerName) => updateSettings({ playerName })}
+            value={profile?.name ?? ""}
+            onChangeText={rename}
             maxLength={MAX_NAME_LENGTH}
             placeholder="Your name"
             placeholderTextColor={MENU_COLORS.textMuted}
             style={styles.input}
           />
         </SettingRow>
+        <Text style={styles.hint}>
+          Signed in as {profile?.provider === "google" ? "Google user" : "guest"} · {stats.racesFinished} races finished ·{" "}
+          {stats.wins} multiplayer wins
+        </Text>
+        <Pressable onPress={confirmSignOut} style={({ pressed }) => [styles.signOut, pressed && styles.pressed]}>
+          <Ionicons name="log-out-outline" size={18} color={MENU_COLORS.text} />
+          <Text style={styles.signOutText}>SIGN OUT</Text>
+        </Pressable>
       </Section>
     </ScrollView>
   );
@@ -105,4 +146,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: "800",
   },
+  signOut: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: MENU_COLORS.panelRaised,
+  },
+  signOutText: { color: MENU_COLORS.text, fontSize: 14, fontWeight: "900", letterSpacing: 1 },
+  pressed: { opacity: 0.7 },
 });

@@ -5,6 +5,7 @@
   "dependencies": {
     "@expo/ui": "~57.0.22",
     "@expo/vector-icons": "^15.0.2",
+    "@react-native-google-signin/google-signin": "^16.1.5",
     "@shopify/react-native-skia": "2.6.2",
     "expo": "~57.0.27",
     "expo-asset": "~57.0.19",
@@ -20,6 +21,7 @@
     "expo-linking": "~57.0.12",
     "expo-network": "~57.0.2",
     "expo-router": "~57.0.25",
+    "expo-secure-store": "~57.0.4",
     "expo-sensors": "~57.0.3",
     "expo-splash-screen": "~57.0.9",
     "expo-status-bar": "~57.0.1",

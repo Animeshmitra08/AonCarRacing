@@ -18,6 +18,7 @@ import { DEFAULT_CAR_STYLE, resolveCarLook } from "@/rendering/carStyle";
 import { GameView3D } from "@/rendering/GameView3D";
 import { CAR_COLORS, GRAPHICS_PRESETS } from "@/rendering/RenderConstants";
 import { useGameRenderer } from "@/rendering/useGameRenderer";
+import { useRecordRaceResult } from "@/scores/useRecordRaceResult";
 import { useGameSettings } from "@/settings/GameSettings";
 
 /** Host drives the authoritative engine; clients drive their predicted replica. Same view for both. */
@@ -82,13 +83,18 @@ function NetworkRaceView({ session, simulation, localId, onInput, controls }: Ne
   const { setSession } = useMultiplayer();
   const lobby = useLobby(session);
   const renderer = useGameRenderer(simulation, localId);
+  const personalBest = useRecordRaceResult(simulation, localId, "multiplayer");
   // Per-player view settings, fixed for the race.
   const [view] = useState(() => ({
-    viewOptions: { cameraMode: settings.cameraMode },
+    viewOptions: {
+      cameraMode: settings.cameraMode,
+      sceneryDensity: GRAPHICS_PRESETS[settings.graphicsQuality].sceneryDensity,
+    },
     renderScale: GRAPHICS_PRESETS[settings.graphicsQuality].renderScale,
   }));
 
   const players = simulation.state.cars.map((car) => lobby.players.find((p) => p.id === car.id));
+  const racerNames = simulation.state.cars.map((car, i) => players[i]?.name ?? `Racer ${car.slot + 1}`);
   const carColors = simulation.state.cars.map(
     (car, i) => CAR_COLORS[(players[i]?.colorIndex ?? car.slot) % CAR_COLORS.length],
   );
@@ -127,12 +133,18 @@ function NetworkRaceView({ session, simulation, localId, onInput, controls }: Ne
       />
       <TouchControls
         onInputChange={onInput}
-        tilt={{ enabled: settings.tiltSteering, sensitivity: settings.tiltSensitivity }}
+        steering={{
+          control: settings.steeringControl,
+          tilt: settings.tiltSteering,
+          tiltSensitivity: settings.tiltSensitivity,
+        }}
       />
       <RaceHud
         engine={simulation}
         carId={localId}
         carColors={carColors}
+        racerNames={racerNames}
+        personalBest={personalBest}
         snapshot={renderer.snapshot}
         controls={controls}
         onExit={exit}

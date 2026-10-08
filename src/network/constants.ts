@@ -1,5 +1,5 @@
 /** Bump when message shapes change; mismatched peers are rejected. */
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 /** Fixed TCP port for rooms, so a room code only needs to encode the host's address. */
 export const ROOM_PORT = 47800;

@@ -2,30 +2,25 @@ import {
   BoxGeometry,
   BufferGeometry,
   Color,
-  ConeGeometry,
-  CylinderGeometry,
   DoubleSide,
   Float32BufferAttribute,
   Group,
-  InstancedMesh,
-  Matrix4,
   Mesh,
   MeshLambertMaterial,
   PlaneGeometry,
-  Quaternion,
   Vector3,
-  type ColorRepresentation,
 } from "three";
 
 import type { Track } from "@/game/entities/Track";
 import type { Vec2 } from "@/game/math/geometry";
 import { METERS_PER_WORLD_UNIT as S } from "@/rendering/RenderConstants";
 
-import { SCENE, SCENERY, TRACK_3D, type EnvironmentPalette } from "./SceneConstants";
+import { SCENE, TRACK_3D, type EnvironmentPalette } from "./SceneConstants";
 
 /**
  * Builds the static 3D track from the same `Track` geometry physics uses,
- * so walls you see are exactly where walls collide.
+ * so walls you see are exactly where walls collide. Scenery is added separately
+ * (see scenery/createScenery.ts).
  */
 export function createTrackModel(track: Track, palette: EnvironmentPalette): Group {
   const group = new Group();
@@ -34,7 +29,6 @@ export function createTrackModel(track: Track, palette: EnvironmentPalette): Gro
     createRoadSurface(track),
     createBarriers(track),
     createFinishGantry(track),
-    createTrees(track, palette),
   );
   return group;
 }
@@ -215,74 +209,4 @@ function createFinishGantry(track: Track): Group {
   beam.rotation.y = -Math.atan2(rz, rx);
   gantry.add(beam);
   return gantry;
-}
-
-/** Deterministic tree scatter outside the barriers, as two instanced draw calls. */
-function createTrees(track: Track, palette: EnvironmentPalette): Group {
-  const random = mulberry32(SCENERY.seed);
-  const { centerline, tangents, halfWidth } = track;
-  const n = centerline.length;
-  const minClearance = halfWidth + SCENERY.minEdgeDistance / S;
-  const minClearanceSq = minClearance * minClearance;
-
-  const positions: Vec2[] = [];
-  for (let attempt = 0; attempt < SCENERY.maxPlacementAttempts && positions.length < SCENERY.treeCount; attempt++) {
-    const i = Math.floor(random() * n);
-    const side = random() < 0.5 ? -1 : 1;
-    const edgeDistance = SCENERY.minEdgeDistance + random() * (SCENERY.maxEdgeDistance - SCENERY.minEdgeDistance);
-    const offset = (halfWidth + edgeDistance / S) * side;
-    const candidate = {
-      x: centerline[i].x - tangents[i].y * offset,
-      y: centerline[i].y + tangents[i].x * offset,
-    };
-    // Reject spots that are near any other part of the track (e.g. inside tight infields).
-    const clear = centerline.every((p) => (p.x - candidate.x) ** 2 + (p.y - candidate.y) ** 2 >= minClearanceSq);
-    if (clear) positions.push(candidate);
-  }
-
-  const trunkGeometry = new CylinderGeometry(SCENERY.trunkRadius, SCENERY.trunkRadius, SCENERY.trunkHeight, 6).translate(
-    0,
-    SCENERY.trunkHeight / 2,
-    0,
-  );
-  const foliageGeometry = new ConeGeometry(SCENERY.foliageRadius, SCENERY.foliageHeight, 7).translate(
-    0,
-    SCENERY.trunkHeight + SCENERY.foliageHeight / 2,
-    0,
-  );
-  const trunks = createInstanced(trunkGeometry, palette.trunk, positions.length);
-  const foliage = createInstanced(foliageGeometry, palette.foliage, positions.length);
-
-  const matrix = new Matrix4();
-  const rotation = new Quaternion();
-  const scale = new Vector3();
-  positions.forEach((p, index) => {
-    const s = SCENERY.minScale + random() * (SCENERY.maxScale - SCENERY.minScale);
-    matrix.compose(toScene(p, 0), rotation, scale.set(s, s, s));
-    trunks.setMatrixAt(index, matrix);
-    foliage.setMatrixAt(index, matrix);
-  });
-
-  const group = new Group();
-  group.add(trunks, foliage);
-  return group;
-}
-
-function createInstanced(geometry: BufferGeometry, color: ColorRepresentation, count: number): InstancedMesh {
-  const mesh = new InstancedMesh(geometry, new MeshLambertMaterial({ color }), count);
-  // Instances surround the whole track; per-instance culling isn't worth it here.
-  mesh.frustumCulled = false;
-  return mesh;
-}
-
-/** Small seeded PRNG so scenery is identical on every device (and every peer). */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) >>> 0;
-    let t = a;
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
 }

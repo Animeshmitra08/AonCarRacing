@@ -1,4 +1,7 @@
 /**
+ * For authored car models with named parts (like CarConcept). For single-mesh scans
+ * with no materials, use scripts/segment-scan-car.mjs instead.
+ *
  * Turns a detailed car .glb into a lightweight in-game model:
  *   node scripts/optimize-car-model.mjs [input.glb] [output.glb]
  *
@@ -19,7 +22,7 @@ import { dedup, getBounds, prune, simplify, weld } from "@gltf-transform/functio
 import { MeshoptSimplifier } from "meshoptimizer";
 
 const INPUT = process.argv[2] ?? "assets/models/CarConcept.glb";
-const OUTPUT = process.argv[3] ?? "assets/models/CarConcept.game.glb";
+const OUTPUT = process.argv[3] ?? "assets/models/car/CarConcept.game.glb";
 
 /** Matches CAR_DIMENSIONS.length (44 world units at 10 units per metre). */
 const TARGET_LENGTH_METERS = 4.4;

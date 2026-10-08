@@ -288,6 +288,8 @@ export class ClientRace implements RaceSimulation {
       racer.lastLapTicks = src.lastLapTicks;
       racer.bestLapTicks = src.bestLapTicks;
       racer.finishTicks = src.finishTicks;
+      // Untrusted network data: keep only finite numbers.
+      racer.lapTimes = Array.isArray(src.lapTimes) ? src.lapTimes.filter(Number.isFinite) : [];
     });
     race.finishOrder.length = 0;
     race.finishOrder.push(...source.finishOrder);

@@ -82,19 +82,12 @@ export const TRACK_3D = {
   gantryOverhang: 1.5,
 } as const;
 
-export const SCENERY = {
-  seed: 1337,
-  treeCount: 180,
-  maxPlacementAttempts: 2000,
-  /** Distance range from the road edge, metres. */
-  minEdgeDistance: 6,
-  maxEdgeDistance: 45,
+/** Simple cone trees, used only if the scenery models can't be loaded. */
+export const FALLBACK_TREE = {
   trunkHeight: 1.6,
   trunkRadius: 0.25,
   foliageHeight: 5,
   foliageRadius: 2.2,
-  minScale: 0.8,
-  maxScale: 1.4,
 } as const;
 
 export type CameraMode = "close" | "far";

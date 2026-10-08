@@ -4,10 +4,11 @@ import { useSharedValue, type SharedValue } from "react-native-reanimated";
 import { SIM_HZ } from "@/game/constants/PhysicsConstants";
 import type { CarId } from "@/game/entities/Car";
 import type { RaceSimulation } from "@/game/engine/RaceSimulation";
+import { WrongWayDetector } from "@/game/engine/WrongWayDetector";
 import type { Pose } from "@/game/math/geometry";
 import type { GameEvent } from "@/game/state/GameEvents";
 import type { GameState } from "@/game/state/GameState";
-import { findRacer, racerElapsedTicks } from "@/game/state/RaceState";
+import { canRacerDrive, findRacer, racerElapsedTicks } from "@/game/state/RaceState";
 
 import { IMPACT_SHAKE, MPS_TO_KMH, PX_PER_METER } from "./RenderConstants";
 import {
@@ -17,6 +18,7 @@ import {
   SNAP_CARS_OFFSET,
   SNAP_RACE_SECONDS,
   SNAP_SPEED_KMH,
+  SNAP_WRONG_WAY,
 } from "./RenderSnapshot";
 import type { WorldView } from "./WorldView";
 
@@ -29,6 +31,7 @@ export class GameRenderer {
   private view: WorldView | null = null;
   private readonly poses: Pose[];
   private readonly followIndex: number;
+  private readonly wrongWay: WrongWayDetector;
 
   constructor(
     private readonly engine: RaceSimulation,
@@ -38,6 +41,7 @@ export class GameRenderer {
     const { cars } = engine.state;
     this.poses = cars.map(() => ({ x: 0, y: 0, angle: 0 }));
     this.followIndex = Math.max(0, cars.findIndex((car) => car.id === followCarId));
+    this.wrongWay = new WrongWayDetector(engine.state.track);
   }
 
   attach(): () => void {
@@ -81,6 +85,14 @@ export class GameRenderer {
     next[SNAP_SPEED_KMH] = (Math.abs(player.forwardSpeed) / PX_PER_METER) * MPS_TO_KMH;
     next[SNAP_BOOST] = player.boostEnergy;
     next[SNAP_RACE_SECONDS] = racer ? racerElapsedTicks(race, racer, tick) / SIM_HZ : 0;
+
+    // Only warn while actually racing (not on the grid, and not after crossing the line).
+    if (racer && canRacerDrive(race, racer)) {
+      const pose = this.poses[this.followIndex];
+      next[SNAP_WRONG_WAY] = this.wrongWay.update(pose.x, pose.y, pose.angle, player.forwardSpeed, frameDt) ? 1 : 0;
+    } else {
+      this.wrongWay.reset();
+    }
     this.snapshot.set(next);
   };
 }

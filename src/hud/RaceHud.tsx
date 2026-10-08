@@ -1,3 +1,4 @@
+import { useMemo, type ReactNode } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 import type { SharedValue } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -5,16 +6,23 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { CarId } from "@/game/entities/Car";
 import type { RaceSimulation } from "@/game/engine/RaceSimulation";
 import { RacePhase } from "@/game/state/RaceState";
+import type { RecordOutcome } from "@/scores/scoreBook";
 
+import { FinisherToast } from "./FinisherToast";
+import { FinishSequence } from "./FinishSequence";
 import { formatTicks } from "./format";
+import { Leaderboard, type RacerInfo } from "./Leaderboard";
 import { LiveReadouts } from "./LiveReadouts";
 import { Minimap } from "./Minimap";
 import { PopText } from "./PopText";
 import { useRaceHud, type RaceHudState } from "./useRaceHud";
+import { WrongWayIndicator } from "./WrongWayIndicator";
 
 const GO_HOLD_MS = 600;
 const PANEL_PADDING = 12;
 const MENU_HIT_SLOP = 10;
+/** Below the ✕ MENU button. */
+const BANNER_OFFSET = 56;
 
 /** Who may start/restart the race. Network clients get `null` and wait for the host. */
 export interface RaceControls {
@@ -27,15 +35,49 @@ interface RaceHudProps {
   carId: CarId;
   /** Index-aligned with `engine.state.cars`. */
   carColors: readonly string[];
+  /** Index-aligned with `engine.state.cars`. */
+  racerNames: readonly string[];
+  /** Personal bests set by this race (shown on the finish banner). */
+  personalBest: RecordOutcome | null;
   snapshot: SharedValue<number[]>;
   controls: RaceControls | null;
   onExit: () => void;
 }
 
-export function RaceHud({ engine, carId, carColors, snapshot, controls, onExit }: RaceHudProps) {
+export function RaceHud({
+  engine,
+  carId,
+  carColors,
+  racerNames,
+  personalBest,
+  snapshot,
+  controls,
+  onExit,
+}: RaceHudProps) {
   const hud = useRaceHud(engine, carId);
   const insets = useSafeAreaInsets();
-  const playerIndex = engine.state.cars.findIndex((car) => car.id === carId);
+  const { cars } = engine.state;
+  const playerIndex = cars.findIndex((car) => car.id === carId);
+  const racers = useMemo(
+    () =>
+      new Map<CarId, RacerInfo>(
+        cars.map((car, i) => [car.id, { name: racerNames[i] ?? `Racer ${i + 1}`, color: carColors[i] ?? "white" }]),
+      ),
+    [cars, racerNames, carColors],
+  );
+
+  const localFinished = hud.finishTicks !== null && hud.position !== null;
+  const bannerTop = insets.top + BANNER_OFFSET;
+  const leaderboard = (
+    <Leaderboard
+      standings={hud.standings}
+      racers={racers}
+      localCarId={carId}
+      laps={hud.laps}
+      final={hud.phase === RacePhase.Results}
+      footer={<ResultsFooter hud={hud} controls={controls} onExit={onExit} />}
+    />
+  );
 
   return (
     <View style={styles.overlay}>
@@ -48,13 +90,7 @@ export function RaceHud({ engine, carId, carColors, snapshot, controls, onExit }
       </View>
 
       <View style={[styles.minimap, { top: insets.top + PANEL_PADDING, right: insets.right + PANEL_PADDING }]}>
-        <Minimap
-          track={engine.state.track}
-          cars={engine.state.cars}
-          carColors={carColors}
-          playerIndex={playerIndex}
-          snapshot={snapshot}
-        />
+        <Minimap track={engine.state.track} cars={cars} carColors={carColors} playerIndex={playerIndex} snapshot={snapshot} />
       </View>
 
       <Pressable
@@ -65,8 +101,24 @@ export function RaceHud({ engine, carId, carColors, snapshot, controls, onExit }
         <Text style={styles.menuButtonText}>✕ MENU</Text>
       </Pressable>
 
+      <WrongWayIndicator snapshot={snapshot} top={bannerTop} />
+      {!localFinished && hud.lastFinisher && (
+        <FinisherToast
+          key={hud.lastFinisher.carId}
+          name={racers.get(hud.lastFinisher.carId)?.name ?? "A racer"}
+          position={hud.lastFinisher.position}
+          top={bannerTop}
+        />
+      )}
+
       <View style={styles.center}>
-        <PhaseOverlay hud={hud} controls={controls} onExit={onExit} />
+        {localFinished ? (
+          <FinishSequence position={hud.position!} totalTicks={hud.finishTicks} personalBest={personalBest}>
+            {leaderboard}
+          </FinishSequence>
+        ) : (
+          <PhaseOverlay hud={hud} controls={controls} leaderboard={leaderboard} />
+        )}
       </View>
     </View>
   );
@@ -75,10 +127,11 @@ export function RaceHud({ engine, carId, carColors, snapshot, controls, onExit }
 interface PhaseOverlayProps {
   hud: RaceHudState;
   controls: RaceControls | null;
-  onExit: () => void;
+  /** Shown at RESULTS if the local player didn't finish. */
+  leaderboard: ReactNode;
 }
 
-function PhaseOverlay({ hud, controls, onExit }: PhaseOverlayProps) {
+function PhaseOverlay({ hud, controls, leaderboard }: PhaseOverlayProps) {
   switch (hud.phase) {
     case RacePhase.Lobby:
       return controls ? (
@@ -91,24 +144,25 @@ function PhaseOverlay({ hud, controls, onExit }: PhaseOverlayProps) {
     case RacePhase.Racing:
       return <PopText key="go" text="GO!" color="#7CFC00" holdMs={GO_HOLD_MS} />;
     case RacePhase.Finishing:
-      return <PopText key="finish" text="FINISH!" />;
+      // Someone else finished; the toast says so and this player keeps racing.
+      return null;
     case RacePhase.Results:
-      return (
-        <View style={styles.results}>
-          <Text style={styles.resultsTitle}>{hud.position === null ? "DNF" : `P${hud.position}`}</Text>
-          <Text style={styles.resultsLine}>TIME {formatTicks(hud.finishTicks)}</Text>
-          <Text style={styles.resultsLine}>BEST LAP {formatTicks(hud.bestLapTicks)}</Text>
-          <View style={styles.resultsButtons}>
-            <HudButton label="MENU" onPress={onExit} secondary />
-            {controls ? (
-              <HudButton label="RACE AGAIN" onPress={() => controls.restart()} />
-            ) : (
-              <Text style={styles.waiting}>WAITING FOR HOST…</Text>
-            )}
-          </View>
-        </View>
-      );
+      return leaderboard;
   }
+}
+
+function ResultsFooter({ hud, controls, onExit }: { hud: RaceHudState; controls: RaceControls | null; onExit: () => void }) {
+  if (hud.phase !== RacePhase.Results) return <Text style={styles.waitingSmall}>Waiting for the other racers…</Text>;
+  return (
+    <>
+      <HudButton label="MENU" onPress={onExit} secondary />
+      {controls ? (
+        <HudButton label="RACE AGAIN" onPress={() => controls.restart()} />
+      ) : (
+        <Text style={styles.waitingSmall}>Waiting for the host…</Text>
+      )}
+    </>
+  );
 }
 
 function HudButton({ label, onPress, secondary = false }: { label: string; onPress: () => void; secondary?: boolean }) {
@@ -141,17 +195,8 @@ const styles = StyleSheet.create({
   lap: { color: "white", fontSize: 22, fontWeight: "900" },
   small: { color: "rgba(255,255,255,0.8)", fontSize: 12, fontWeight: "700" },
   center: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", pointerEvents: "box-none" },
-  results: {
-    alignItems: "center",
-    gap: 8,
-    padding: 24,
-    borderRadius: 16,
-    backgroundColor: "rgba(0,0,0,0.7)",
-  },
-  resultsTitle: { color: "white", fontSize: 48, fontWeight: "900" },
-  resultsLine: { color: "white", fontSize: 18, fontWeight: "700" },
-  resultsButtons: { flexDirection: "row", alignItems: "center", gap: 12 },
   waiting: { color: "white", fontSize: 16, fontWeight: "800", letterSpacing: 1, marginTop: 8 },
+  waitingSmall: { color: "rgba(255,255,255,0.75)", fontSize: 13, fontWeight: "800", letterSpacing: 0.5 },
   menuButton: {
     position: "absolute",
     alignSelf: "center",
@@ -163,12 +208,11 @@ const styles = StyleSheet.create({
   menuButtonText: { color: "white", fontSize: 13, fontWeight: "900", letterSpacing: 1 },
   buttonSecondary: { backgroundColor: "rgba(255,255,255,0.15)" },
   button: {
-    marginTop: 8,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
     borderRadius: 999,
     backgroundColor: "#e63946",
   },
   buttonPressed: { opacity: 0.7 },
-  buttonText: { color: "white", fontSize: 18, fontWeight: "900", letterSpacing: 1 },
+  buttonText: { color: "white", fontSize: 16, fontWeight: "900", letterSpacing: 1 },
 });

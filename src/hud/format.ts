@@ -13,3 +13,17 @@ export function formatRaceTime(seconds: number): string {
 export function formatTicks(ticks: number | null): string {
   return ticks === null ? "--:--.--" : formatRaceTime(ticks / SIM_HZ);
 }
+
+/** Compact lap time for split lists: "12.34", or "1:02.3" past a minute. */
+export function formatLapTicks(ticks: number): string {
+  const seconds = ticks / SIM_HZ;
+  if (seconds < 60) return seconds.toFixed(2);
+  const minutes = Math.floor(seconds / 60);
+  const rest = seconds - minutes * 60;
+  return `${minutes}:${rest < 10 ? "0" : ""}${rest.toFixed(1)}`;
+}
+
+/** "+1.23s" gap behind the winner. */
+export function formatGapTicks(ticks: number): string {
+  return `+${(ticks / SIM_HZ).toFixed(2)}s`;
+}

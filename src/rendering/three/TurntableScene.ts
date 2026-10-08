@@ -12,8 +12,10 @@ import {
 
 import type { CarLook } from "@/rendering/carStyle";
 
-import type { CarAsset } from "./carAsset";
+import type { CarModelId } from "@/rendering/carCatalog";
+
 import { CarModel } from "./CarModel";
+import { pickCarAsset, type CarAssets } from "./loadCarAssets";
 import { createGLRenderer } from "./createGLRenderer";
 import { disposeScene } from "./disposeScene";
 
@@ -29,7 +31,8 @@ export class TurntableScene {
   private readonly renderer: WebGLRenderer;
   private readonly scene = new Scene();
   private readonly camera: PerspectiveCamera;
-  private readonly car: CarModel;
+  private car: CarModel;
+  private model: CarModelId;
   private heading = Math.PI / 5;
   private rafId: number | null = null;
   private lastTime = -1;
@@ -37,7 +40,7 @@ export class TurntableScene {
   constructor(
     private readonly gl: ExpoWebGLRenderingContext,
     look: CarLook,
-    asset: CarAsset | null,
+    private readonly assets: CarAssets,
   ) {
     this.renderer = createGLRenderer(gl);
     this.renderer.setClearColor(BACKGROUND);
@@ -59,13 +62,23 @@ export class TurntableScene {
     platform.position.y = -PLATFORM.height / 2;
     this.scene.add(platform);
 
-    this.car = new CarModel(look, asset);
+    this.model = look.model;
+    this.car = new CarModel(look, pickCarAsset(assets, look.model));
     this.scene.add(this.car.root);
     this.rafId = requestAnimationFrame(this.frame);
   }
 
+  /** Recolours in place; a different model swaps the car (keeping its spin angle). */
   setLook(look: CarLook): void {
-    this.car.setLook(look);
+    if (look.model === this.model) {
+      this.car.setLook(look);
+      return;
+    }
+    this.scene.remove(this.car.root);
+    disposeScene(this.car.root);
+    this.model = look.model;
+    this.car = new CarModel(look, pickCarAsset(this.assets, look.model));
+    this.scene.add(this.car.root);
   }
 
   dispose(): void {

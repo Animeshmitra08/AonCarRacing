@@ -115,6 +115,7 @@ export class RaceEngine {
     racer.completedLaps++;
     racer.lastLapTicks = lapTicks;
     racer.bestLapTicks = racer.bestLapTicks === null ? lapTicks : Math.min(racer.bestLapTicks, lapTicks);
+    racer.lapTimes.push(lapTicks);
     racer.lapStartTick = tick;
     this.emit({ type: "lapCompleted", carId: racer.carId, completedLaps: racer.completedLaps, lapTicks });
 

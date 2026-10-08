@@ -4,7 +4,8 @@ import { StyleSheet, useWindowDimensions, View } from "react-native";
 
 import type { RaceSimulation } from "@/game/engine/RaceSimulation";
 
-import { loadCarAsset } from "./three/loadCarAsset";
+import { loadCarAssets } from "./three/loadCarAssets";
+import { loadSceneryModels } from "./three/scenery/loadSceneryModels";
 import { ThreeWorldView, type ThreeWorldViewOptions } from "./three/ThreeWorldView";
 import type { GameRenderer } from "./useGameRenderer";
 
@@ -24,7 +25,7 @@ interface GameView3DProps {
  * and scale it back up to fill the screen.
  */
 export function GameView3D(props: GameView3DProps) {
-  // The car model is preloaded at app start, so this normally resolves immediately.
+  // Models are preloaded by the loading screen, so this normally resolves immediately.
   return (
     <Suspense fallback={<View style={styles.container} />}>
       <GLSurface {...props} />
@@ -33,12 +34,13 @@ export function GameView3D(props: GameView3DProps) {
 }
 
 function GLSurface({ engine, renderer, viewOptions, renderScale }: GameView3DProps) {
-  const carAsset = use(loadCarAsset());
+  const cars = use(loadCarAssets());
+  const scenery = use(loadSceneryModels());
   const { width, height } = useWindowDimensions();
   useEffect(() => () => renderer.setView(null), [renderer]);
 
   const handleContextCreate = (gl: ExpoWebGLRenderingContext) => {
-    renderer.setView(new ThreeWorldView(gl, engine.state.track, engine.state.cars, viewOptions, carAsset));
+    renderer.setView(new ThreeWorldView(gl, engine.state.track, engine.state.cars, viewOptions, { cars, scenery }));
   };
 
   const scaledWidth = width * renderScale;

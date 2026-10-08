@@ -11,7 +11,8 @@ import { GarageTab } from "@/menu/tabs/GarageTab";
 import { MultiplayerPanel } from "@/menu/tabs/MultiplayerPanel";
 import { RaceTab } from "@/menu/tabs/RaceTab";
 import { SettingsTab } from "@/menu/tabs/SettingsTab";
-import { useGameSettings } from "@/settings/GameSettings";
+import { useAccount } from "@/account/AccountContext";
+import { displayName } from "@/account/profile";
 
 type HomeTab = "race" | "garage" | "multiplayer" | "settings";
 
@@ -28,7 +29,7 @@ const TAB_FADE_MS = 180;
 export function HomeScreen() {
   const insets = useSafeAreaInsets();
   const isFocused = useIsFocused();
-  const { settings } = useGameSettings();
+  const { profile } = useAccount();
   const [tab, setTab] = useState<HomeTab>("race");
 
   // Multiplayer has its own HOST/JOIN buttons; everywhere else the big button starts a solo race.
@@ -44,7 +45,7 @@ export function HomeScreen() {
         <Pressable onPress={() => setTab("settings")} style={({ pressed }) => [styles.chip, pressed && styles.pressed]}>
           <Ionicons name="person-circle" size={20} color={MENU_COLORS.highlight} />
           <Text style={styles.chipText} numberOfLines={1}>
-            {settings.playerName || "Player"}
+            {displayName(profile)}
           </Text>
         </Pressable>
       </View>

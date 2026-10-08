@@ -30,7 +30,8 @@ export class CarController {
     let lateral = -vx * fy + vy * fx;
 
     // --- Boost (energy-based so it can later be driven by pickups) ---
-    car.boosting = input.boost && input.throttle > 0 && car.boostEnergy > 0;
+    // Boost is its own thrust: it works without the gas pedal. Braking cancels it.
+    car.boosting = input.boost && !input.brake && car.boostEnergy > 0;
     if (car.boosting) {
       car.boostEnergy = Math.max(0, car.boostEnergy - t.boost.drainPerSecond * dt);
     } else {
@@ -38,6 +39,7 @@ export class CarController {
     }
     const maxForward = t.maxForwardSpeed * (car.boosting ? t.boost.speedMultiplier : 1);
     const accelMultiplier = car.boosting ? t.boost.accelerationMultiplier : 1;
+    const throttle = car.boosting ? 1 : input.throttle;
 
     // --- Longitudinal ---
     const before = forward;
@@ -45,12 +47,12 @@ export class CarController {
       forward -= (forward > t.reverseEngageSpeed ? t.brakeDeceleration : t.reverseAcceleration) * dt;
       // Never flip from forward to reverse within one tick; stop first.
       if (before > 0 && forward < 0) forward = 0;
-    } else if (input.throttle > 0) {
+    } else if (throttle > 0) {
       if (forward < -t.reverseEngageSpeed) {
         forward += t.brakeDeceleration * dt;
         if (forward > 0) forward = 0;
       } else {
-        forward += t.acceleration * accelMultiplier * input.throttle * dt;
+        forward += t.acceleration * accelMultiplier * throttle * dt;
       }
     } else {
       const friction = Math.min(Math.abs(forward), t.rollingFriction * dt);

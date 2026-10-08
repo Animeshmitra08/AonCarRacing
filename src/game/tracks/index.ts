@@ -2,9 +2,19 @@ import { buildTrack, type Track, type TrackDefinition } from "@/game/entities/Tr
 
 import { ALPINE_PASS } from "./alpinePass";
 import { DESERT_SPEEDWAY } from "./desertSpeedway";
+import { GLACIER_SWITCHBACKS } from "./glacierSwitchbacks";
 import { GREEN_VALLEY } from "./greenValley";
+import { LAKESIDE_SPRINT } from "./lakesideSprint";
+import { SUNSET_CANYON } from "./sunsetCanyon";
 
-export const TRACKS: readonly TrackDefinition[] = [GREEN_VALLEY, DESERT_SPEEDWAY, ALPINE_PASS];
+export const TRACKS: readonly TrackDefinition[] = [
+  GREEN_VALLEY,
+  DESERT_SPEEDWAY,
+  ALPINE_PASS,
+  LAKESIDE_SPRINT,
+  SUNSET_CANYON,
+  GLACIER_SWITCHBACKS,
+];
 
 export function findTrack(id: string): TrackDefinition {
   return TRACKS.find((track) => track.id === id) ?? TRACKS[0];

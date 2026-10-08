@@ -13,6 +13,7 @@ import Animated, {
 import { MENU_COLORS } from "@/menu/MenuTheme";
 
 import { loadGameAssets } from "./loadGameAssets";
+import type { PlayerData } from "./loadPlayerData";
 
 /** Shown at least this long so the screen never just flashes. */
 const MIN_VISIBLE_MS = 900;
@@ -30,12 +31,14 @@ const TIPS = [
 ];
 
 interface LoadingScreenProps {
-  /** Called once loading is done and the fade-out has finished. */
+  /** Called as soon as everything is loaded, so the app can mount underneath before the fade. */
+  onLoaded: (data: PlayerData) => void;
+  /** Called once the fade-out has finished. */
   onFinished: () => void;
 }
 
 /** Full-screen overlay that loads game assets, then fades away to reveal the app. */
-export function LoadingScreen({ onFinished }: LoadingScreenProps) {
+export function LoadingScreen({ onLoaded, onFinished }: LoadingScreenProps) {
   const [label, setLabel] = useState("Starting engine");
   const [percent, setPercent] = useState(0);
   const [tip] = useState(() => TIPS[Math.floor(Math.random() * TIPS.length)]);
@@ -57,8 +60,9 @@ export function LoadingScreen({ onFinished }: LoadingScreenProps) {
       progress.set(withTiming(fraction, PROGRESS_TIMING));
       setPercent(Math.round(fraction * 100));
       setLabel(step);
-    }).then(() => {
+    }).then((data) => {
       if (cancelled) return;
+      onLoaded(data);
       const wait = Math.max(0, MIN_VISIBLE_MS - (Date.now() - startedAt));
       fadeTimer = setTimeout(() => {
         opacity.set(withTiming(0, { duration: FADE_OUT_MS }));
@@ -70,7 +74,7 @@ export function LoadingScreen({ onFinished }: LoadingScreenProps) {
       cancelled = true;
       clearTimeout(fadeTimer);
     };
-    // Load exactly once; `onFinished` is only read after loading completes.
+    // Load exactly once; the callbacks are only read after loading completes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

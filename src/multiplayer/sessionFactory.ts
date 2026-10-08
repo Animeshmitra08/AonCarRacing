@@ -11,9 +11,10 @@ import type { GameSettings } from "@/settings/GameSettings";
 const SELF_TEST_TIMEOUT_MS = 3000;
 
 /** Wires the platform pieces (native TCP server, interface list) into a host session. */
-export async function hostRoom(settings: GameSettings): Promise<HostSession> {
+/** `name` is the signed-in player's display name. */
+export async function hostRoom(settings: GameSettings, name: string): Promise<HostSession> {
   const session = new HostSession({
-    name: settings.playerName,
+    name,
     colorIndex: settings.carColorIndex,
     style: settings.carStyle,
     trackId: settings.trackId,
@@ -36,7 +37,7 @@ export async function hostRoom(settings: GameSettings): Promise<HostSession> {
   return session;
 }
 
-export async function joinRoom(code: string, settings: GameSettings): Promise<ClientSession> {
+export async function joinRoom(code: string, settings: GameSettings, name: string): Promise<ClientSession> {
   const resolved = resolveRoomAddress(code);
   if (!resolved.ok) throw new Error(resolved.error);
 
@@ -50,7 +51,7 @@ export async function joinRoom(code: string, settings: GameSettings): Promise<Cl
   const session = new ClientSession({
     address: resolved.address,
     roomCode: code.trim().toUpperCase(),
-    name: settings.playerName,
+    name,
     colorIndex: settings.carColorIndex,
     style: settings.carStyle,
   });

@@ -2,13 +2,20 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useMemo, useRef } from "react";
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+  type SharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { clamp } from "@/game/math/geometry";
 import { createNeutralInput, type CarInput } from "@/game/state/CarInput";
 
-import type { TiltSensitivity } from "./tiltSteering";
+import type { SteeringOptions } from "./steeringOptions";
+import { SteeringWheel } from "./SteeringWheel";
 import { useTiltSteering } from "./useTiltSteering";
 
 type ControlButton = "left" | "right" | "throttle" | "brake" | "boost";
@@ -18,42 +25,42 @@ const EDGE_PADDING = 20;
 const BUTTON_SIZE = 84;
 const THROTTLE_HEIGHT = 120;
 const BOOST_SIZE = 64;
-const WHEEL_SIZE = 72;
+const INDICATOR_SIZE = 72;
 /** Indicator wheel rotation at full lock, degrees. */
-const WHEEL_MAX_ROTATION = 90;
+const INDICATOR_MAX_ROTATION = 90;
 const PRESS_TIMING = { duration: 70 } as const;
+const WHEEL_RETURN_SPRING = { damping: 14, stiffness: 180 } as const;
 /** Fingers drift while racing; never cancel a held button for moving. */
 const UNLIMITED_DISTANCE = 10_000;
-
-export interface TiltOptions {
-  enabled: boolean;
-  sensitivity: TiltSensitivity;
-}
 
 interface TouchControlsProps {
   /** Receives the same (mutated) object on each change; consumers should copy it. */
   onInputChange: (input: Readonly<CarInput>) => void;
-  tilt: TiltOptions;
+  steering: SteeringOptions;
 }
 
 /**
  * Turns touches (and optionally phone tilt) into a `CarInput`. It never touches
  * the car or engine directly, so the same input shape can come from a network peer.
+ *
+ * Steering priority: a grabbed on-screen wheel, then tilt, then the ◀ ▶ buttons.
  */
-export function TouchControls({ onInputChange, tilt }: TouchControlsProps) {
+export function TouchControls({ onInputChange, steering }: TouchControlsProps) {
   const insets = useSafeAreaInsets();
   const buttons = useRef<ButtonState>({ left: false, right: false, throttle: false, brake: false, boost: false });
   const tiltSteer = useRef(0);
+  /** Set while the on-screen wheel is held; overrides tilt. */
+  const wheelSteer = useRef<number | null>(null);
   const input = useRef(createNeutralInput());
   const wheel = useSharedValue(0);
 
-  // Only one steering source is live at a time (tilt hides ◀ ▶, and an unavailable
-  // accelerometer never reports), so the two can simply be added.
   const emit = () => {
     const b = buttons.current;
     const next = input.current;
+    // ◀ ▶ are hidden while tilt is live, and an unavailable accelerometer never
+    // reports, so tilt and buttons can simply be added.
     const buttonSteer = (b.right ? 1 : 0) - (b.left ? 1 : 0);
-    next.steering = clamp(tiltSteer.current + buttonSteer, -1, 1);
+    next.steering = wheelSteer.current ?? clamp(tiltSteer.current + buttonSteer, -1, 1);
     next.throttle = b.throttle ? 1 : 0;
     next.brake = b.brake;
     next.boost = b.boost;
@@ -65,20 +72,38 @@ export function TouchControls({ onInputChange, tilt }: TouchControlsProps) {
     emit();
   };
 
-  const tiltStatus = useTiltSteering(tilt.enabled, tilt.sensitivity, (steering) => {
-    tiltSteer.current = steering;
-    wheel.set(steering);
+  const tiltStatus = useTiltSteering(steering.tilt, steering.tiltSensitivity, (value) => {
+    tiltSteer.current = value;
+    // The wheel shows tilt, except while a thumb is turning it.
+    if (wheelSteer.current === null) wheel.set(value);
     emit();
   });
   // Fall back to buttons if the phone has no accelerometer.
-  const useTilt = tilt.enabled && tiltStatus !== "unavailable";
+  const tiltLive = steering.tilt && tiltStatus !== "unavailable";
+
+  const turnWheel = (value: number) => {
+    wheelSteer.current = value;
+    emit();
+  };
+  const releaseWheel = () => {
+    wheelSteer.current = null;
+    // With tilt, the wheel snaps back to the phone's tilt on the next sample; otherwise it self-centres.
+    if (tiltLive) wheel.set(tiltSteer.current);
+    else wheel.set(withSpring(0, WHEEL_RETURN_SPRING));
+    emit();
+  };
 
   const bottom = insets.bottom + EDGE_PADDING;
 
   return (
     <View style={styles.overlay}>
       <View style={[styles.cluster, { bottom, left: insets.left + EDGE_PADDING }]}>
-        {useTilt ? (
+        {steering.control === "wheel" ? (
+          <View style={styles.wheelColumn}>
+            <SteeringWheel steering={wheel} onTurn={turnWheel} onRelease={releaseWheel} />
+            {tiltLive && <Text style={[styles.tiltLabel, styles.passThrough]}>TILT · GRAB WHEEL TO OVERRIDE</Text>}
+          </View>
+        ) : tiltLive ? (
           <TiltIndicator steering={wheel} />
         ) : (
           <>
@@ -101,11 +126,11 @@ export function TouchControls({ onInputChange, tilt }: TouchControlsProps) {
 
 /** Small steering wheel that turns with the phone, so players can see what tilt is doing. */
 function TiltIndicator({ steering }: { steering: SharedValue<number> }) {
-  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${steering.get() * WHEEL_MAX_ROTATION}deg` }] }));
+  const style = useAnimatedStyle(() => ({ transform: [{ rotate: `${steering.get() * INDICATOR_MAX_ROTATION}deg` }] }));
   return (
     <View style={styles.tilt}>
       <Animated.View style={style}>
-        <MaterialCommunityIcons name="steering" size={WHEEL_SIZE} color="rgba(255,255,255,0.85)" />
+        <MaterialCommunityIcons name="steering" size={INDICATOR_SIZE} color="rgba(255,255,255,0.85)" />
       </Animated.View>
       <Text style={styles.tiltLabel}>TILT TO STEER</Text>
     </View>
@@ -171,6 +196,10 @@ const styles = StyleSheet.create({
   brake: { backgroundColor: "rgba(170,30,30,0.8)" },
   boost: { width: BOOST_SIZE, height: BOOST_SIZE, borderRadius: BOOST_SIZE / 2, backgroundColor: "rgba(200,150,0,0.8)" },
   label: { color: "white", fontSize: 16, fontWeight: "900" },
+  /** Display-only tilt indicator: never takes touches. */
   tilt: { alignItems: "center", gap: 2, pointerEvents: "none" },
+  /** The wheel itself must receive touches; only the label passes them through. */
+  wheelColumn: { alignItems: "center", gap: 2, pointerEvents: "box-none" },
+  passThrough: { pointerEvents: "none" },
   tiltLabel: { color: "rgba(255,255,255,0.7)", fontSize: 10, fontWeight: "900", letterSpacing: 1 },
 });
