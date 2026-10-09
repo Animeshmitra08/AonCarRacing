@@ -28,6 +28,9 @@ interface GarageTabProps {
 
 type StylePart = Exclude<keyof CarStyle, "model">;
 
+/** With a single car there's nothing to cycle through. */
+const CAN_PICK_MODEL = CAR_MODELS.length > 1;
+
 /** Every recolourable detail, in the order shown. */
 const PARTS: readonly { key: StylePart; label: string; options: readonly StyleOption[] }[] = [
   { key: "accent", label: "ACCENT · ROOF, SILLS, WING", options: ACCENT_OPTIONS },
@@ -52,14 +55,15 @@ export function GarageTab({ visible }: GarageTabProps) {
       <View style={styles.preview}>
         {visible && <CarPreview3D look={look} />}
         <View style={styles.modelBar}>
-          <ArrowButton icon="chevron-back" onPress={() => cycleModel(-1)} />
+          {CAN_PICK_MODEL && <ArrowButton icon="chevron-back" onPress={() => cycleModel(-1)} />}
           <Animated.View key={car.id} entering={FadeIn.duration(200)} style={styles.modelInfo}>
             <Text style={styles.modelName}>{car.name.toUpperCase()}</Text>
             <Text style={styles.modelTagline}>
-              {car.tagline} · {carStyle.model + 1}/{CAR_MODELS.length}
+              {car.tagline}
+              {CAN_PICK_MODEL && ` · ${carStyle.model + 1}/${CAR_MODELS.length}`}
             </Text>
           </Animated.View>
-          <ArrowButton icon="chevron-forward" onPress={() => cycleModel(1)} />
+          {CAN_PICK_MODEL && <ArrowButton icon="chevron-forward" onPress={() => cycleModel(1)} />}
         </View>
       </View>
 

@@ -113,7 +113,12 @@ export function RaceHud({
 
       <View style={styles.center}>
         {localFinished ? (
-          <FinishSequence position={hud.position!} totalTicks={hud.finishTicks} personalBest={personalBest}>
+          <FinishSequence
+            ranked={cars.length > 1}
+            position={hud.position!}
+            totalTicks={hud.finishTicks}
+            personalBest={personalBest}
+          >
             {leaderboard}
           </FinishSequence>
         ) : (

@@ -40,6 +40,8 @@ export class CarController {
     const maxForward = t.maxForwardSpeed * (car.boosting ? t.boost.speedMultiplier : 1);
     const accelMultiplier = car.boosting ? t.boost.accelerationMultiplier : 1;
     const throttle = car.boosting ? 1 : input.throttle;
+    car.braking = input.brake;
+    car.accelerating = !input.brake && throttle > 0;
 
     // --- Longitudinal ---
     const before = forward;

@@ -39,7 +39,7 @@ export type InputFrame = [number, number, number, number, number];
  * Per-car snapshot fields, flattened into `cars`. Velocity is Matter's native
  * unit (world units per fixed step) so it can be applied directly.
  */
-export const CAR_STATE_STRIDE = 9;
+export const CAR_STATE_STRIDE = 11;
 export const CS_X = 0;
 export const CS_Y = 1;
 export const CS_ANGLE = 2;
@@ -49,6 +49,8 @@ export const CS_STEER = 5;
 export const CS_FORWARD_SPEED = 6;
 export const CS_BOOST_ENERGY = 7;
 export const CS_BOOSTING = 8;
+export const CS_ACCELERATING = 9;
+export const CS_BRAKING = 10;
 
 export type ClientMessage =
   | { type: "hello"; protocol: number; name: string; colorIndex: number; style: CarStyle }

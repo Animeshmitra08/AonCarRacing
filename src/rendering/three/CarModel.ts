@@ -1,10 +1,11 @@
-import { BoxGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshBasicMaterial, PlaneGeometry } from "three";
+import { BoxGeometry, ConeGeometry, CylinderGeometry, Group, Mesh, MeshBasicMaterial, PlaneGeometry, Vector3 } from "three";
 
 import { CAR_DIMENSIONS } from "@/game/constants/PhysicsConstants";
 import type { CarLook } from "@/rendering/carStyle";
 import { METERS_PER_WORLD_UNIT as S } from "@/rendering/RenderConstants";
 
-import type { CarAsset } from "./carAsset";
+import type { CarAsset, CarLamps } from "./carAsset";
+import { CarLights } from "./CarLights";
 import { CarMaterials } from "./carMaterials";
 
 const LENGTH = CAR_DIMENSIONS.length * S;
@@ -29,6 +30,15 @@ const FALLBACK = {
   light: { size: 0.18, inset: 0.35 },
 } as const;
 
+/** Visual-only car state (see `Car`). */
+export interface CarEffects {
+  boosting: boolean;
+  /** Headlight beams. */
+  accelerating: boolean;
+  /** Brake lights. */
+  braking: boolean;
+}
+
 /**
  * One car in the 3D scene, facing +x with its origin on the ground under its centre.
  * Built from the shared `CarAsset` when available, otherwise from primitives.
@@ -41,6 +51,7 @@ export class CarModel {
   private readonly spinPivots: Group[] = [];
   private readonly flames: Mesh[] = [];
   private readonly materials: CarMaterials;
+  private readonly lights: CarLights;
   private wheelRadius: number = FALLBACK.wheelRadius;
   private wheelAngle = 0;
 
@@ -49,11 +60,19 @@ export class CarModel {
     if (asset) this.buildFromAsset(asset);
     else this.buildFallback();
     this.addFlames();
-    this.root.add(this.body, createShadow());
+    const lamps = fallbackLamps();
+    this.lights = new CarLights(
+      asset?.lamps.head.length ? asset.lamps.head : lamps.head,
+      asset?.lamps.tail.length ? asset.lamps.tail : lamps.tail,
+      look.lights,
+    );
+    this.body.add(this.lights.object);
+    this.root.add(this.body, createShadow(), this.lights.ground);
   }
 
   setLook(look: CarLook): void {
     this.materials.setLook(look);
+    this.lights.setColor(look.lights);
   }
 
   /**
@@ -67,9 +86,10 @@ export class CarModel {
     steer: number,
     speed: number,
     speedRatio: number,
-    boosting: boolean,
+    effects: Readonly<CarEffects>,
     dt: number,
   ): void {
+    const { boosting } = effects;
     this.root.position.set(x, 0, z);
     // 2D heading turns +x toward +y (= scene +z), which is a negative rotation about scene y.
     this.root.rotation.y = -heading;
@@ -85,6 +105,9 @@ export class CarModel {
       flame.visible = boosting;
       if (boosting) flame.scale.y = 0.75 + Math.random() * 0.5; // flicker
     }
+
+    this.lights.update(effects.accelerating, effects.braking, dt);
+    this.materials.setBrakeLight(this.lights.brake);
   }
 
   private buildFromAsset(asset: CarAsset): void {
@@ -92,14 +115,15 @@ export class CarModel {
       this.body.add(new Mesh(part.geometry, this.materials.forRole(part.role, part.color)));
     }
     for (const wheel of asset.wheels) {
-      const spin = this.addWheelPivot(wheel.center.x, wheel.center.y, wheel.center.z, wheel.front);
+      const { steer, spin } = this.addWheelPivot(wheel.center.x, wheel.center.y, wheel.center.z, wheel.front);
       for (const part of wheel.parts) spin.add(new Mesh(part.geometry, this.materials.forRole(part.role, part.color)));
+      for (const part of wheel.brakeParts) steer.add(new Mesh(part.geometry, this.materials.forRole(part.role, part.color)));
     }
     this.wheelRadius = asset.wheels[0]?.radius ?? FALLBACK.wheelRadius;
   }
 
-  /** steer pivot (front wheels turn about y) → spin pivot (rolls about z) → wheel meshes. */
-  private addWheelPivot(x: number, y: number, z: number, front: boolean): Group {
+  /** steer pivot (front wheels turn about y; holds the calipers) → spin pivot (rolls about z) → wheel meshes. */
+  private addWheelPivot(x: number, y: number, z: number, front: boolean): { steer: Group; spin: Group } {
     const steer = new Group();
     steer.position.set(x, y, z);
     const spin = new Group();
@@ -107,7 +131,7 @@ export class CarModel {
     this.root.add(steer);
     if (front) this.steerPivots.push(steer);
     this.spinPivots.push(spin);
-    return spin;
+    return { steer, spin };
   }
 
   private buildFallback(): void {
@@ -137,13 +161,13 @@ export class CarModel {
     this.body.add(chassis, cabin, wing);
 
     const lightGeometry = new BoxGeometry(F.light.size / 2, F.light.size, F.light.size * 1.6);
-    const lightY = F.bodyBottom + F.bodyHeight * 0.65;
-    for (const z of [-(WIDTH / 2 - F.light.inset), WIDTH / 2 - F.light.inset]) {
-      const front = new Mesh(lightGeometry, this.materials.forRole("headlight", 0));
-      front.position.set(LENGTH / 2, lightY, z);
-      const rear = new Mesh(lightGeometry, this.materials.forRole("taillight", 0));
-      rear.position.set(-LENGTH / 2, lightY, z);
-      this.body.add(front, rear);
+    const lamps = fallbackLamps();
+    for (const [role, positions] of [["headlight", lamps.head], ["taillight", lamps.tail]] as const) {
+      for (const position of positions) {
+        const lamp = new Mesh(lightGeometry, this.materials.forRole(role, 0));
+        lamp.position.copy(position);
+        this.body.add(lamp);
+      }
     }
 
     // Axle along local z.
@@ -154,7 +178,7 @@ export class CarModel {
     const trackZ = WIDTH / 2 - F.wheelWidth / 2;
     for (const x of [axleX, -axleX]) {
       for (const z of [-trackZ, trackZ]) {
-        this.addWheelPivot(x, F.wheelRadius, z, x > 0).add(new Mesh(wheelGeometry, this.materials.forRole("tire", 0)));
+        this.addWheelPivot(x, F.wheelRadius, z, x > 0).spin.add(new Mesh(wheelGeometry, this.materials.forRole("tire", 0)));
       }
     }
   }
@@ -171,6 +195,16 @@ export class CarModel {
       this.body.add(flame);
     }
   }
+}
+
+/** The low-poly car's lamps; also used if a model has no headlight/taillight parts. */
+function fallbackLamps(): CarLamps {
+  const y = FALLBACK.bodyBottom + FALLBACK.bodyHeight * 0.65;
+  const sides = [-(WIDTH / 2 - FALLBACK.light.inset), WIDTH / 2 - FALLBACK.light.inset];
+  return {
+    head: sides.map((z) => new Vector3(LENGTH / 2, y, z)),
+    tail: sides.map((z) => new Vector3(-LENGTH / 2, y, z)),
+  };
 }
 
 /** Cheap blob shadow instead of real shadow maps. */

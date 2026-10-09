@@ -14,7 +14,7 @@ import type { CarLook } from "@/rendering/carStyle";
 
 import type { CarModelId } from "@/rendering/carCatalog";
 
-import { CarModel } from "./CarModel";
+import { CarModel, type CarEffects } from "./CarModel";
 import { pickCarAsset, type CarAssets } from "./loadCarAssets";
 import { createGLRenderer } from "./createGLRenderer";
 import { disposeScene } from "./disposeScene";
@@ -25,6 +25,8 @@ const CAMERA = { fov: 34, x: 6.5, y: 2.8, z: 6.5, lookAtY: 0.55 } as const;
 /** Radians per second. */
 const SPIN_SPEED = 0.6;
 const MAX_FRAME_SECONDS = 0.1;
+/** Parked: no flames, beams or brake lights. */
+const PARKED: CarEffects = { boosting: false, accelerating: false, braking: false };
 
 /** A slowly spinning car on a platform, for the garage. Runs its own rAF loop. */
 export class TurntableScene {
@@ -93,7 +95,7 @@ export class TurntableScene {
     const dt = this.lastTime < 0 ? 0 : Math.min((now - this.lastTime) / 1000, MAX_FRAME_SECONDS);
     this.lastTime = now;
     this.heading += SPIN_SPEED * dt;
-    this.car.update(0, 0, this.heading, 0, 0, 0, false, dt);
+    this.car.update(0, 0, this.heading, 0, 0, 0, PARKED, dt);
     this.renderer.render(this.scene, this.camera);
     this.gl.endFrameEXP();
   };

@@ -94,7 +94,7 @@ export class ThreeWorldView implements WorldView {
         car.steer,
         car.forwardSpeed * S,
         this.speedRatio(car),
-        car.boosting,
+        car,
         dt,
       );
       this.smoke.emitFromCar(i, pose.x * S, pose.y * S, pose.angle, car.forwardSpeed, car.boosting, dt);

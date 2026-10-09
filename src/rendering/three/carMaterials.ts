@@ -1,10 +1,13 @@
-import { MeshBasicMaterial, MeshLambertMaterial, MeshPhongMaterial, type Material } from "three";
+import { Color, MeshBasicMaterial, MeshLambertMaterial, MeshPhongMaterial, type Material } from "three";
 
 import type { CarLook } from "@/rendering/carStyle";
 
 import type { PartRole } from "./carAsset";
 
 type CustomRole = "paint" | "accent" | "trim" | "rim" | "caliper" | "glass" | "headlight";
+
+/** Tail lamps: dim red while driving, bright when braking. */
+const TAILLIGHT = { off: new Color(0x5a0808), braking: new Color(0xff1a1a) } as const;
 
 /**
  * Cheap mobile materials for each car part. Phong gives paint, chrome and glass a
@@ -21,13 +24,14 @@ export class CarMaterials {
     glass: new MeshPhongMaterial({ shininess: 120, specular: 0x8a9099 }),
     headlight: new MeshBasicMaterial(),
   };
+  private readonly taillight = new MeshBasicMaterial({ color: TAILLIGHT.off });
   private readonly fixed: Record<Exclude<PartRole, CustomRole | "original">, Material> = {
     mechanical: new MeshLambertMaterial({ color: 0x1b1c1e }),
     rimInner: new MeshLambertMaterial({ color: 0x121314 }),
     disc: new MeshLambertMaterial({ color: 0x6d7075 }),
     tire: new MeshLambertMaterial({ color: 0x141414 }),
     chrome: new MeshPhongMaterial({ color: 0xd0d4da, shininess: 120, specular: 0xaaaaaa }),
-    taillight: new MeshBasicMaterial({ color: 0xff1a1a }),
+    taillight: this.taillight,
     signal: new MeshBasicMaterial({ color: 0xff9a1a }),
   };
   private readonly originals = new Map<number, Material>();
@@ -48,6 +52,11 @@ export class CarMaterials {
     this.custom.caliper.color.set(look.calipers);
     this.custom.glass.color.set(look.glass);
     this.custom.headlight.color.set(look.lights);
+  }
+
+  /** `level` 0 (off) .. 1 (braking). */
+  setBrakeLight(level: number): void {
+    this.taillight.color.lerpColors(TAILLIGHT.off, TAILLIGHT.braking, level);
   }
 
   forRole(role: PartRole, originalColor: number): Material {

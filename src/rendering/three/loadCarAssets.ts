@@ -1,6 +1,7 @@
-import concept from "../../../assets/models/car/CarConcept.game.glb";
-import stallion from "../../../assets/models/car/CarConcept2.game.glb";
-import raptor from "../../../assets/models/car/CarConcept3.game.glb";
+import ferrari296GT3 from "../../../assets/models/car/Ferrari296GTBGT3.game.glb";
+import auroGT3 from "../../../assets/models/car/LamborginiAuroGT3.game.glb";
+import revuelto from "../../../assets/models/car/LamborginiRevuelto.game.glb";
+import amgGT from "../../../assets/models/car/MercedesBenzAMZGT.game.glb";
 import { CAR_MODELS, type CarModelId } from "@/rendering/carCatalog";
 
 import { buildCarAsset, type CarAsset } from "./carAsset";
@@ -9,8 +10,8 @@ import { nextFrame, parseGltf, readAssetBytes } from "./gltf";
 /** `fraction` 0..1 within the load. */
 export type LoadProgress = (fraction: number, label: string) => void;
 
-/** Game-ready models (see scripts/optimize-car-model.mjs and scripts/segment-scan-car.mjs). */
-const FILES: Record<CarModelId, number> = { concept, stallion, raptor };
+/** Game-ready models, built by scripts/build-car-model.mjs (configs in scripts/cars/). */
+const FILES: Record<CarModelId, number> = { auroGT3, ferrari296GT3, revuelto, amgGT };
 
 /** Every car that loaded. A missing entry falls back to another car (or the low-poly one). */
 export type CarAssets = Partial<Record<CarModelId, CarAsset>>;

@@ -22,9 +22,11 @@ import {
 } from "@/network/constants";
 import {
   CAR_STATE_STRIDE,
+  CS_ACCELERATING,
   CS_ANGLE,
   CS_BOOST_ENERGY,
   CS_BOOSTING,
+  CS_BRAKING,
   CS_FORWARD_SPEED,
   CS_STEER,
   CS_VX,
@@ -262,7 +264,7 @@ export class ClientRace implements RaceSimulation {
     }
   }
 
-  /** Steering/boost/speed drive remote cars' wheel and flame visuals. */
+  /** Steering/boost/speed/pedals drive remote cars' wheel, flame and light visuals. */
   private applyRemoteCosmetics(cars: number[]): void {
     this.state.cars.forEach((car, i) => {
       if (i === this.localIndex) return;
@@ -271,6 +273,8 @@ export class ClientRace implements RaceSimulation {
       car.forwardSpeed = cars[base + CS_FORWARD_SPEED];
       car.boostEnergy = cars[base + CS_BOOST_ENERGY];
       car.boosting = cars[base + CS_BOOSTING] === 1;
+      car.accelerating = cars[base + CS_ACCELERATING] === 1;
+      car.braking = cars[base + CS_BRAKING] === 1;
     });
   }
 
@@ -318,4 +322,6 @@ function applyCarState(car: Car, cars: number[], base: number): void {
   car.forwardSpeed = cars[base + CS_FORWARD_SPEED];
   car.boostEnergy = cars[base + CS_BOOST_ENERGY];
   car.boosting = cars[base + CS_BOOSTING] === 1;
+  car.accelerating = cars[base + CS_ACCELERATING] === 1;
+  car.braking = cars[base + CS_BRAKING] === 1;
 }

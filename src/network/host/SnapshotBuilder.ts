@@ -1,9 +1,11 @@
 import type { GameState } from "@/game/state/GameState";
 import {
   CAR_STATE_STRIDE,
+  CS_ACCELERATING,
   CS_ANGLE,
   CS_BOOST_ENERGY,
   CS_BOOSTING,
+  CS_BRAKING,
   CS_FORWARD_SPEED,
   CS_STEER,
   CS_VX,
@@ -33,6 +35,8 @@ export function buildSnapshot(state: GameState, acks: Record<PlayerId, number>):
     cars[base + CS_FORWARD_SPEED] = round(car.forwardSpeed, 1);
     cars[base + CS_BOOST_ENERGY] = round(car.boostEnergy, 3);
     cars[base + CS_BOOSTING] = car.boosting ? 1 : 0;
+    cars[base + CS_ACCELERATING] = car.accelerating ? 1 : 0;
+    cars[base + CS_BRAKING] = car.braking ? 1 : 0;
   });
   return { type: "snapshot", tick: state.tick, cars, acks, race: state.race };
 }

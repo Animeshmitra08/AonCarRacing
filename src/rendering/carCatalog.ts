@@ -4,9 +4,11 @@
  * The model files are mapped in rendering/three/loadCarAssets.ts.
  */
 export const CAR_MODELS = [
-  { id: "concept", name: "Concept GT", tagline: "Low-slung concept coupe" },
-  { id: "stallion", name: "Stallion R", tagline: "Fastback muscle with a big wing" },
-  { id: "raptor", name: "Raptor V10", tagline: "Mid-engine supercar" },
+  // Index 0 is the default: saved settings and multiplayer refer to cars by index.
+  { id: "auroGT3", name: "Auro GT3", tagline: "Mid-engine GT3 racer" },
+  { id: "ferrari296GT3", name: "296 GT3", tagline: "Ferrari twin-turbo V6 racer" },
+  { id: "revuelto", name: "Revuelto", tagline: "Lamborghini V12 hybrid supercar" },
+  { id: "amgGT", name: "AMG GT", tagline: "Mercedes four-door grand tourer" },
 ] as const;
 
 export type CarModelId = (typeof CAR_MODELS)[number]["id"];

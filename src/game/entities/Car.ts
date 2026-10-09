@@ -16,6 +16,9 @@ export class Car {
   /** 0..1 */
   boostEnergy = 1;
   boosting = false;
+  /** Pedal state from the last tick, for the head/brake light visuals. */
+  accelerating = false;
+  braking = false;
 
   /** Pose at the start of the current tick: used for render interpolation and gate crossing. */
   prevX: number;
@@ -61,6 +64,8 @@ export class Car {
     this.forwardSpeed = 0;
     this.boostEnergy = 1;
     this.boosting = false;
+    this.accelerating = false;
+    this.braking = false;
     this.recordPreviousPose();
   }
 }
