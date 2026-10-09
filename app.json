@@ -2,9 +2,9 @@
   "expo": {
     "name": "CarRacing",
     "slug": "CarRacing",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "landscape",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/carlogo.png",
     "scheme": "carracing",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -36,8 +36,8 @@
         "expo-splash-screen",
         {
           "backgroundColor": "#0f1220",
-          "image": "./assets/images/splash-icon.png",
-          "imageWidth": 76
+          "image": "./assets/images/splash-car.png",
+          "imageWidth": 170
         }
       ],
       [
